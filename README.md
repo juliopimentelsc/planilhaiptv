@@ -6,6 +6,7 @@ Aplicação para organizar clientes de IPTV, credenciais, painéis, planos e dat
 
 - Cadastro, consulta, edição e exclusão de clientes
 - Painéis Atmos, Cinemax, Luma TV, Nexus, Espace One Play, Slim Plus e Aura TV+
+- Opção para adicionar outros painéis personalizados
 - Busca por cliente, telefone, login, plano ou painel
 - Resumo de contas ativas, próximas do vencimento e expiradas
 - Dados salvos no armazenamento local do navegador

@@ -9,10 +9,11 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 export const Route = createFileRoute("/")({ component: Index });
 
-const PANELS = ["Atmos", "Cinemax", "Luma TV", "Nexus", "Espace One Play", "Slim Plus", "Aura TV+"] as const;
+const DEFAULT_PANELS = ["Atmos", "Cinemax", "Luma TV", "Nexus", "Espace One Play", "Slim Plus", "Aura TV+"] as const;
 const STORAGE_KEY = "iptv-client-manager.clients.v1";
+const PANELS_STORAGE_KEY = "iptv-client-manager.panels.v1";
 
-type PanelName = (typeof PANELS)[number];
+type PanelName = string;
 type Page = "overview" | "clients" | "panels";
 type ClientStatus = "active" | "expiring" | "expired";
 type StatusFilter = "all" | ClientStatus;
@@ -43,6 +44,20 @@ const EMPTY_FORM: ClientFields = {
   name: "", phone: "", panel: "Atmos", panelNumber: "", username: "", password: "",
   purchaseDate: todayIso(), expirationDate: "", plan: "", notes: "",
 };
+
+function normalizePanelNames(value: unknown): PanelName[] {
+  const unique = new Map<string, string>();
+  DEFAULT_PANELS.forEach((panel) => unique.set(panel.toLocaleLowerCase("pt-BR"), panel));
+  if (Array.isArray(value)) {
+    value.forEach((item) => {
+      if (typeof item !== "string") return;
+      const panel = item.trim().slice(0, 40);
+      const key = panel.toLocaleLowerCase("pt-BR");
+      if (panel && !unique.has(key)) unique.set(key, panel);
+    });
+  }
+  return Array.from(unique.values());
+}
 
 function dateOrdinal(value: string) {
   const [year, month, day] = value.split("-").map(Number);
@@ -87,7 +102,7 @@ function isClient(value: unknown): value is Client {
   return typeof client["id"] === "string" &&
     typeof client["name"] === "string" &&
     typeof client["panel"] === "string" &&
-    PANELS.includes(client["panel"] as PanelName) &&
+    client["panel"] !== "" &&
     typeof client["phone"] === "string" &&
     typeof client["panelNumber"] === "string" &&
     typeof client["username"] === "string" &&
@@ -158,11 +173,12 @@ function ClientTable({ clients, onView, onEdit, onDelete, onCreate, compact = fa
 
 type ClientFormModalProps = {
   client: Client | null;
+  panels: PanelName[];
   onClose: () => void;
   onSave: (fields: ClientFields, client: Client | null) => void;
 };
 
-function ClientFormModal({ client, onClose, onSave }: ClientFormModalProps) {
+function ClientFormModal({ client, panels, onClose, onSave }: ClientFormModalProps) {
   const [form, setForm] = useState<ClientFields>(() => client ? {
     name: client.name, phone: client.phone, panel: client.panel, panelNumber: client.panelNumber,
     username: client.username, password: client.password, purchaseDate: client.purchaseDate,
@@ -200,7 +216,7 @@ function ClientFormModal({ client, onClose, onSave }: ClientFormModalProps) {
           <div className="form-section">
             <div className="form-section-title"><span className="form-step">02</span><div><strong>Painel e acesso</strong><small>Dados usados para localizar a conta.</small></div></div>
             <div className="form-grid">
-              <label className="field"><span>Painel <b>*</b></span><span className="select-wrap"><select required value={form.panel} onChange={(event) => update("panel", event.target.value as PanelName)}>{PANELS.map((panel) => <option key={panel} value={panel}>{panel}</option>)}</select><ChevronDown size={16} /></span></label>
+              <label className="field"><span>Painel <b>*</b></span><span className="select-wrap"><select required value={form.panel} onChange={(event) => update("panel", event.target.value)}>{panels.map((panel) => <option key={panel} value={panel}>{panel}</option>)}</select><ChevronDown size={16} /></span></label>
               <label className="field"><span>Nº do painel <b>*</b></span><input required maxLength={40} value={form.panelNumber} onChange={(event) => update("panelNumber", event.target.value)} placeholder="Ex.: 01 ou servidor 2" /></label>
               <label className="field"><span>Login / usuário <b>*</b></span><input required maxLength={100} autoComplete="off" value={form.username} onChange={(event) => update("username", event.target.value)} placeholder="Usuário de acesso" /></label>
               <label className="field"><span>Senha <b>*</b></span><span className="input-with-action"><input required maxLength={120} autoComplete="new-password" type={showPassword ? "text" : "password"} value={form.password} onChange={(event) => update("password", event.target.value)} placeholder="Senha de acesso" /><button type="button" className="field-action" aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"} onClick={() => setShowPassword((value) => !value)}>{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button></span></label>
@@ -216,6 +232,53 @@ function ClientFormModal({ client, onClose, onSave }: ClientFormModalProps) {
             {formError && <p className="form-error"><AlertTriangle size={15} />{formError}</p>}
           </div>
           <div className="form-footer"><span className="required-note"><b>*</b> Campos obrigatórios</span><div className="form-buttons"><button type="button" className="button button-secondary" onClick={onClose}>Cancelar</button><button type="submit" className="button button-primary"><Check size={16} />{client ? "Salvar alterações" : "Salvar cliente"}</button></div></div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+type PanelFormModalProps = {
+  onClose: () => void;
+  onSave: (panel: string) => boolean;
+};
+
+function PanelFormModal({ onClose, onSave }: PanelFormModalProps) {
+  const [name, setName] = useState("");
+  const [error, setError] = useState("");
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const panel = name.trim();
+    if (!panel) {
+      setError("Digite o nome do painel.");
+      return;
+    }
+    if (panel.length > 40) {
+      setError("Use até 40 caracteres.");
+      return;
+    }
+    if (!onSave(panel)) {
+      setError("Já existe um painel com esse nome.");
+      return;
+    }
+    onClose();
+  }
+
+  return (
+    <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className="modal-card panel-form-modal" role="dialog" aria-modal="true" aria-labelledby="panel-form-title">
+        <div className="modal-heading">
+          <div><span className="eyebrow">PERSONALIZE SUA BASE</span><h2 id="panel-form-title">Adicionar painel</h2><p>O painel ficará disponível nos cadastros e filtros de clientes.</p></div>
+          <button className="icon-button modal-close" aria-label="Fechar" onClick={onClose}><X size={19} /></button>
+        </div>
+        <form onSubmit={submit}>
+          <label className="field panel-name-field">
+            <span>Nome do painel <b>*</b></span>
+            <input autoFocus required maxLength={40} value={name} onChange={(event) => { setName(event.target.value); setError(""); }} placeholder="Ex.: Meu novo painel" />
+          </label>
+          {error && <p className="form-error">{error}</p>}
+          <div className="form-footer"><span className="required-note"><b>*</b> Campo obrigatório</span><div className="form-buttons"><button type="button" className="button button-secondary" onClick={onClose}>Cancelar</button><button type="submit" className="button button-primary"><Plus size={16} />Adicionar painel</button></div></div>
         </form>
       </section>
     </div>
@@ -265,12 +328,14 @@ function ClientDetailModal({ client, onClose, onEdit, onDelete, onCopy }: Client
 function Index() {
   const [page, setPage] = useState<Page>("overview");
   const [clients, setClients] = useState<Client[]>([]);
+  const [panels, setPanels] = useState<PanelName[]>([...DEFAULT_PANELS]);
   const [loaded, setLoaded] = useState(false);
   const [storageWarning, setStorageWarning] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [selectedPanel, setSelectedPanel] = useState<PanelName | "all">("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [formOpen, setFormOpen] = useState(false);
+  const [panelFormOpen, setPanelFormOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [viewingClient, setViewingClient] = useState<Client | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Client | null>(null);
@@ -287,6 +352,12 @@ function Index() {
     } catch {
       setStorageWarning(true);
     }
+    try {
+      const savedPanels = window.localStorage.getItem(PANELS_STORAGE_KEY);
+      if (savedPanels) setPanels(normalizePanelNames(JSON.parse(savedPanels)));
+    } catch {
+      setStorageWarning(true);
+    }
     setLoaded(true);
   }, []);
 
@@ -294,10 +365,11 @@ function Index() {
     if (!loaded || storageWarning) return;
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(clients));
+      window.localStorage.setItem(PANELS_STORAGE_KEY, JSON.stringify(panels));
     } catch {
       setStorageWarning(true);
     }
-  }, [clients, loaded, storageWarning]);
+  }, [clients, panels, loaded, storageWarning]);
 
   useEffect(() => {
     if (!toast) return;
@@ -313,10 +385,11 @@ function Index() {
   }, [clients, selectedPanel]);
 
   const panelCounts = useMemo(() => {
-    const result = Object.fromEntries(PANELS.map((panel) => [panel, 0])) as Record<PanelName, number>;
-    clients.forEach((client) => { result[client.panel] += 1; });
+    const result: Record<PanelName, number> = {};
+    panels.forEach((panel) => { result[panel] = 0; });
+    clients.forEach((client) => { result[client.panel] = (result[client.panel] ?? 0) + 1; });
     return result;
-  }, [clients]);
+  }, [clients, panels]);
 
   const visibleClients = useMemo(() => {
     const query = searchTerm.trim().toLocaleLowerCase("pt-BR");
@@ -332,6 +405,16 @@ function Index() {
   function openCreate() {
     setEditingClient(null);
     setFormOpen(true);
+  }
+
+  function addPanel(panelName: string) {
+    const normalized = panelName.trim().toLocaleLowerCase("pt-BR");
+    if (normalized === "all" || panels.some((panel) => panel.toLocaleLowerCase("pt-BR") === normalized)) {
+      return false;
+    }
+    setPanels((current) => [...current, panelName.trim()]);
+    setToast("Painel adicionado.");
+    return true;
   }
 
   function openEdit(client: Client) {
@@ -417,9 +500,9 @@ function Index() {
         <nav className="primary-nav" aria-label="Menu principal">
           {navItems.map(({ key, label, icon: Icon, count }) => <button key={key} className={"nav-link" + (page === key ? " nav-link-active" : "")} onClick={() => navigate(key)}><Icon size={18} strokeWidth={1.9} /><span>{label}</span>{count !== undefined && <small>{count}</small>}</button>)}
         </nav>
-        <div className="nav-label panels-label">PAINÉIS</div>
+        <div className="sidebar-panels-heading"><div className="nav-label panels-label">PAINÉIS</div><button className="sidebar-add-panel" aria-label="Adicionar painel" title="Adicionar painel" onClick={() => setPanelFormOpen(true)}><Plus size={14} /></button></div>
         <nav className="panel-nav" aria-label="Painéis de clientes">
-          {PANELS.map((panel) => <button key={panel} className={"panel-nav-link" + (page === "clients" && selectedPanel === panel ? " panel-nav-active" : "")} onClick={() => goToClients(panel)}><span className="panel-nav-dot" /><span>{panel}</span><small>{panelCounts[panel]}</small></button>)}
+          {panels.map((panel) => <button key={panel} className={"panel-nav-link" + (page === "clients" && selectedPanel === panel ? " panel-nav-active" : "")} onClick={() => goToClients(panel)}><span className="panel-nav-dot" /><span>{panel}</span><small>{panelCounts[panel] ?? 0}</small></button>)}
         </nav>
         <div className="sidebar-bottom">
           <div className="local-mode-card"><span className="local-mode-icon"><Database size={16} /></span><div><strong>{storageWarning ? "Armazenamento indisponível" : "Modo neste navegador"}</strong><small>{storageWarning ? "Não foi possível salvar os dados" : "Os dados ficam salvos aqui"}</small></div><span className={"storage-indicator" + (storageWarning ? " storage-error" : "")} /></div>
@@ -438,7 +521,7 @@ function Index() {
         </header>
 
         <div className="page-content">
-          <div className="page-heading"><div><span className="eyebrow">{heading.eyebrow}</span><h1>{heading.title}</h1><p>{heading.description}</p></div>{page !== "overview" && <button className="button button-primary page-create" onClick={openCreate}><Plus size={16} /> Cadastrar cliente</button>}</div>
+          <div className="page-heading"><div><span className="eyebrow">{heading.eyebrow}</span><h1>{heading.title}</h1><p>{heading.description}</p></div>{page === "panels" ? <button className="button button-primary page-create" onClick={() => setPanelFormOpen(true)}><Plus size={16} /> Adicionar painel</button> : page === "clients" && <button className="button button-primary page-create" onClick={openCreate}><Plus size={16} /> Cadastrar cliente</button>}</div>
           {storageWarning
             ? <div className="storage-alert"><AlertTriangle size={17} /><span>O navegador não permitiu salvar os dados. Seus cadastros podem ser perdidos ao fechar esta página.</span></div>
             : <div className="local-data-notice"><ShieldCheck size={15} /><span>Os dados são salvos somente neste navegador e não sincronizam entre dispositivos.</span><span className="notice-dot" /><span>Senhas armazenadas localmente</span></div>}
@@ -457,9 +540,10 @@ function Index() {
               </section>
               <section className="content-card panel-summary-card">
                 <div className="card-heading"><div><h2>Clientes por painel</h2><p>Distribuição dos seus cadastros.</p></div><span className="card-heading-icon"><Server size={17} /></span></div>
-                <div className="panel-summary-list">{PANELS.map((panel) => {
-                  const percent = clients.length ? Math.round((panelCounts[panel] / clients.length) * 100) : 0;
-                  return <button className="panel-summary-row" key={panel} onClick={() => goToClients(panel)}><span className="panel-summary-dot" /><span className="panel-summary-name">{panel}</span><span className="panel-summary-track"><span style={{ width: String(percent) + "%" }} /></span><strong>{panelCounts[panel]}</strong></button>;
+                <div className="panel-summary-list">{panels.map((panel) => {
+                  const panelCount = panelCounts[panel] ?? 0;
+                  const percent = clients.length ? Math.round((panelCount / clients.length) * 100) : 0;
+                  return <button className="panel-summary-row" key={panel} onClick={() => goToClients(panel)}><span className="panel-summary-dot" /><span className="panel-summary-name">{panel}</span><span className="panel-summary-track"><span style={{ width: String(percent) + "%" }} /></span><strong>{panelCount}</strong></button>;
                 })}</div>
                 <button className="panel-summary-footer" onClick={() => navigate("panels")}>Ver todos os painéis <ArrowRight size={15} /></button>
               </section>
@@ -468,7 +552,7 @@ function Index() {
           </>}
 
           {page === "clients" && <section className="content-card clients-card">
-            <div className="card-heading clients-card-heading"><div><h2>{selectedPanel === "all" ? "Todos os clientes" : "Painel " + selectedPanel}</h2><p>{visibleClients.length} {visibleClients.length === 1 ? "cadastro encontrado" : "cadastros encontrados"}</p></div><label className="filter-select"><span className="sr-only">Filtrar por painel</span><select value={selectedPanel} onChange={(event) => setSelectedPanel(event.target.value as PanelName | "all")}><option value="all">Todos os painéis</option>{PANELS.map((panel) => <option key={panel} value={panel}>{panel}</option>)}</select><ChevronDown size={15} /></label></div>
+            <div className="card-heading clients-card-heading"><div><h2>{selectedPanel === "all" ? "Todos os clientes" : "Painel " + selectedPanel}</h2><p>{visibleClients.length} {visibleClients.length === 1 ? "cadastro encontrado" : "cadastros encontrados"}</p></div><label className="filter-select"><span className="sr-only">Filtrar por painel</span><select value={selectedPanel} onChange={(event) => setSelectedPanel(event.target.value)}><option value="all">Todos os painéis</option>{panels.map((panel) => <option key={panel} value={panel}>{panel}</option>)}</select><ChevronDown size={15} /></label></div>
             <div className="status-filters" role="group" aria-label="Filtrar por situação">
               {([["all", "Todos", counts.all], ["active", "Ativos", counts.active], ["expiring", "Vencem em breve", counts.expiring], ["expired", "Expirados", counts.expired]] as const).map(([filter, label, count]) => <button key={filter} className={"filter-tab" + (statusFilter === filter ? " filter-tab-active" : "")} onClick={() => setStatusFilter(filter)}>{label}<span>{count}</span></button>)}
             </div>
@@ -476,17 +560,18 @@ function Index() {
           </section>}
 
           {page === "panels" && <>
-            <section className="panel-cards-grid">{PANELS.map((panel, index) => {
+            <section className="panel-cards-grid">{panels.map((panel, index) => {
               const colors = ["mint", "blue", "violet", "amber", "rose", "teal", "slate"];
-              return <button className="panel-card" key={panel} onClick={() => goToClients(panel)}><span className={"panel-card-icon tone-" + colors[index]}><Tv size={20} /></span><span className="panel-card-title">{panel}</span><strong>{panelCounts[panel]}</strong><span className="panel-card-caption">{panelCounts[panel] === 1 ? "cliente cadastrado" : "clientes cadastrados"}</span><span className="panel-card-arrow"><ArrowRight size={16} /></span></button>;
-            })}</section>
-            <section className="content-card panels-note"><span className="detail-icon"><Server size={17} /></span><div><strong>Sete painéis, uma única base</strong><p>Selecione um painel para consultar, editar ou cadastrar clientes vinculados a ele.</p></div><button className="button button-primary button-small" onClick={openCreate}><Plus size={15} /> Novo cliente</button></section>
+              return <button className="panel-card" key={panel} onClick={() => goToClients(panel)}><span className={"panel-card-icon tone-" + colors[index % colors.length]}><Tv size={20} /></span><span className="panel-card-title">{panel}</span><strong>{panelCounts[panel] ?? 0}</strong><span className="panel-card-caption">{panelCounts[panel] === 1 ? "cliente cadastrado" : "clientes cadastrados"}</span><span className="panel-card-arrow"><ArrowRight size={16} /></span></button>;
+            })}<button className="panel-card panel-card-add" onClick={() => setPanelFormOpen(true)}><span className="panel-card-icon"><Plus size={20} /></span><span className="panel-card-title">Adicionar painel</span><span className="panel-card-caption">Cadastre outro painel para organizar seus clientes.</span><span className="panel-card-arrow"><ArrowRight size={16} /></span></button></section>
+            <section className="content-card panels-note"><span className="detail-icon"><Server size={17} /></span><div><strong>Painéis em uma única base</strong><p>Selecione um painel para consultar, editar ou cadastrar clientes vinculados a ele.</p></div><button className="button button-primary button-small" onClick={() => setPanelFormOpen(true)}><Plus size={15} /> Adicionar painel</button></section>
           </>}
         </div>
         <footer className="app-footer"><span>IPTV Base</span><span>Gestão simples para sua operação</span></footer>
       </main>
 
-      {formOpen && <ClientFormModal key={editingClient?.id ?? "new"} client={editingClient} onClose={() => { setFormOpen(false); setEditingClient(null); }} onSave={saveClient} />}
+      {formOpen && <ClientFormModal key={editingClient?.id ?? "new"} client={editingClient} panels={panels} onClose={() => { setFormOpen(false); setEditingClient(null); }} onSave={saveClient} />}
+      {panelFormOpen && <PanelFormModal onClose={() => setPanelFormOpen(false)} onSave={addPanel} />}
       {viewingClient && <ClientDetailModal client={viewingClient} onClose={() => setViewingClient(null)} onEdit={openEdit} onDelete={setDeleteTarget} onCopy={copyValue} />}
       {deleteTarget && <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setDeleteTarget(null)}><section className="modal-card delete-modal" role="alertdialog" aria-modal="true" aria-labelledby="delete-title"><span className="delete-icon"><Trash2 size={21} /></span><h2 id="delete-title">Excluir cadastro?</h2><p>O cadastro de <strong>{deleteTarget.name}</strong> será removido deste navegador. Esta ação não pode ser desfeita.</p><div className="form-buttons delete-buttons"><button className="button button-secondary" onClick={() => setDeleteTarget(null)}>Cancelar</button><button className="button button-danger" onClick={deleteClient}><Trash2 size={16} />Excluir cliente</button></div></section></div>}
       {toast && <div className="toast-message" role="status"><Check size={16} />{toast}</div>}
