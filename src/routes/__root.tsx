@@ -78,14 +78,21 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "Guia Não Puxa Mais | Protocolo de 14 Dias" },
+      {
+        name: "description",
+        content:
+          "Um passo a passo de 14 dias para ajudar seu cão a caminhar com a guia frouxa, sem trancos e sem equipamento caro.",
+      },
+      { name: "author", content: "Guia Não Puxa Mais" },
+      { property: "og:title", content: "Guia Não Puxa Mais | Protocolo de 14 Dias" },
+      {
+        property: "og:description",
+        content:
+          "Um passo a passo diário para passeios mais leves com seu cão.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:site", content: "@Lovable" },
     ],
     links: [
       {
@@ -103,7 +110,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="pt-BR">
       <head>
         <HeadContent />
       </head>
