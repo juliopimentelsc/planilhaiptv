@@ -16,7 +16,7 @@ Aplicação para organizar clientes, credenciais, painéis, planos e vencimentos
 
 1. Crie um projeto no Supabase.
 2. No SQL Editor do projeto, execute o conteúdo de [`supabase/migrations/20261010000000_create_customer_manager.sql`](supabase/migrations/20261010000000_create_customer_manager.sql).
-3. Copie `.env.example` para `.env.local` e preencha `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY` com os valores do seu projeto. Em Lovable, configure as mesmas variáveis no ambiente do app.
+3. Este projeto já inclui a URL e a chave pública do Supabase conectado. Para usar outro projeto ou rodar localmente com configuração própria, copie `.env.example` para `.env.local` e preencha `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY`.
 4. Reinicie o app e crie uma conta na tela de acesso. Se a confirmação de e-mail estiver ativa no Supabase, confirme a mensagem recebida antes de entrar.
 
 Use apenas a chave pública `publishable` (ou a antiga `anon`) no navegador. Nunca coloque uma chave `service_role` no código do app. O banco aplica Row Level Security para que cada conta consulte e altere apenas seus próprios painéis e clientes.
