@@ -17,6 +17,8 @@ type PanelName = string;
 type Page = "overview" | "clients" | "panels";
 type ClientStatus = "active" | "expiring" | "expired";
 type StatusFilter = "all" | ClientStatus;
+type CustomerAccountStatus = "active" | "inactive";
+type CustomerAccountFilter = "all" | CustomerAccountStatus;
 
 type Client = {
   id: string;
@@ -30,6 +32,7 @@ type Client = {
   expirationDate: string;
   plan: string;
   app?: string;
+  customerStatus?: CustomerAccountStatus;
   notes: string;
   createdAt: string;
 };
@@ -43,7 +46,7 @@ function todayIso() {
 
 const EMPTY_FORM: ClientFields = {
   name: "", phone: "", panel: "Atmos", panelNumber: "", username: "", password: "",
-  purchaseDate: todayIso(), expirationDate: "", plan: "", app: "", notes: "",
+  purchaseDate: todayIso(), expirationDate: "", plan: "", app: "", customerStatus: "active", notes: "",
 };
 
 function normalizePanelNames(value: unknown): PanelName[] {
@@ -112,6 +115,7 @@ function isClient(value: unknown): value is Client {
     typeof client["expirationDate"] === "string" &&
     typeof client["plan"] === "string" &&
     (typeof client["app"] === "undefined" || typeof client["app"] === "string") &&
+    (typeof client["customerStatus"] === "undefined" || client["customerStatus"] === "active" || client["customerStatus"] === "inactive") &&
     typeof client["notes"] === "string" &&
     typeof client["createdAt"] === "string";
 }
@@ -120,10 +124,10 @@ function makeId() {
   return globalThis.crypto?.randomUUID?.() ?? String(Date.now()) + "-" + Math.random().toString(36).slice(2, 10);
 }
 
-function StatusBadge({ status }: { status: ClientStatus }) {
-  const labels: Record<ClientStatus, string> = { active: "Ativo", expiring: "Vence em breve", expired: "Expirado" };
-  const Icon = status === "active" ? Check : status === "expiring" ? Clock3 : CircleAlert;
-  return <span className={"status-badge status-" + status}><Icon size={13} strokeWidth={2.3} />{labels[status]}</span>;
+function CustomerStatusBadge({ status }: { status: CustomerAccountStatus }) {
+  const active = status === "active";
+  const Icon = active ? Check : CircleAlert;
+  return <span className={"status-badge " + (active ? "status-active" : "status-inactive")}><Icon size={13} strokeWidth={2.3} />{active ? "Ativo" : "Inativo"}</span>;
 }
 
 type ClientTableProps = {
@@ -149,17 +153,16 @@ function ClientTable({ clients, onView, onEdit, onDelete, onCreate, compact = fa
   return (
     <div className={"table-wrap" + (compact ? " table-compact" : "")}>
       <table className="client-table">
-        <thead><tr><th>Cliente</th><th>Painel</th><th>Plano</th><th>Vencimento</th><th>Status</th><th><span className="sr-only">Ações</span></th></tr></thead>
+        <thead><tr><th>Cliente</th><th>Painel</th><th>Plano</th><th>Vencimento</th><th>Situação</th><th><span className="sr-only">Ações</span></th></tr></thead>
         <tbody>
           {clients.map((client) => {
-            const status = getClientStatus(client);
             return (
               <tr key={client.id} onClick={() => onView(client)}>
                 <td><div className="customer-cell"><div className="customer-avatar">{initials(client.name)}</div><div className="customer-copy"><strong>{client.name}</strong><span>{client.phone || client.username}</span></div></div></td>
                 <td><span className="panel-cell"><span className="panel-dot"><Tv size={13} /></span>{client.panel}</span>{client.panelNumber && <span className="sub-cell">Painel {client.panelNumber}</span>}</td>
                 <td><span className="plan-cell">{client.plan || "—"}</span></td>
                 <td><strong className="date-cell">{formatDate(client.expirationDate)}</strong><span className="sub-cell">{expirationLabel(client.expirationDate)}</span></td>
-                <td><StatusBadge status={status} /></td>
+                <td><CustomerStatusBadge status={client.customerStatus ?? "active"} /></td>
                 <td><div className="row-actions" onClick={(event) => event.stopPropagation()}>
                   <button className="icon-button" aria-label={"Editar " + client.name} title="Editar" onClick={() => onEdit(client)}><Pencil size={15} /></button>
                   <button className="icon-button icon-button-danger" aria-label={"Excluir " + client.name} title="Excluir" onClick={() => onDelete(client)}><Trash2 size={15} /></button>
@@ -184,7 +187,8 @@ function ClientFormModal({ client, panels, onClose, onSave }: ClientFormModalPro
   const [form, setForm] = useState<ClientFields>(() => client ? {
     name: client.name, phone: client.phone, panel: client.panel, panelNumber: client.panelNumber,
     username: client.username, password: client.password, purchaseDate: client.purchaseDate,
-    expirationDate: client.expirationDate, plan: client.plan, app: client.app ?? "", notes: client.notes,
+    expirationDate: client.expirationDate, plan: client.plan, app: client.app ?? "",
+    customerStatus: client.customerStatus ?? "active", notes: client.notes,
   } : { ...EMPTY_FORM, purchaseDate: todayIso() });
   const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState("");
@@ -212,6 +216,7 @@ function ClientFormModal({ client, panels, onClose, onSave }: ClientFormModalPro
             <div className="form-grid">
               <label className="field field-span-2"><span>Nome do cliente <b>*</b></span><input autoFocus required maxLength={90} value={form.name} onChange={(event) => update("name", event.target.value)} placeholder="Ex.: Ana Souza" /></label>
               <label className="field"><span>WhatsApp / telefone</span><input type="tel" maxLength={30} value={form.phone} onChange={(event) => update("phone", event.target.value)} placeholder="(11) 99999-9999" /></label>
+              <label className="field"><span>Situação do cliente <b>*</b></span><span className="select-wrap"><select required value={form.customerStatus ?? "active"} onChange={(event) => update("customerStatus", event.target.value as CustomerAccountStatus)}><option value="active">Ativo</option><option value="inactive">Inativo</option></select><ChevronDown size={16} /></span></label>
             </div>
           </div>
           <div className="form-section">
@@ -302,7 +307,7 @@ function ClientDetailModal({ client, onClose, onEdit, onDelete, onCopy }: Client
   return (
     <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <section className="modal-card detail-modal" role="dialog" aria-modal="true" aria-labelledby="detail-title">
-        <div className="detail-cover"><button className="icon-button detail-close" aria-label="Fechar" onClick={onClose}><X size={19} /></button><div className="detail-avatar">{initials(client.name)}</div><span className="eyebrow">FICHA DO CLIENTE</span><h2 id="detail-title">{client.name}</h2><p>{client.phone || "Telefone não informado"}</p><StatusBadge status={status} /></div>
+        <div className="detail-cover"><button className="icon-button detail-close" aria-label="Fechar" onClick={onClose}><X size={19} /></button><div className="detail-avatar">{initials(client.name)}</div><span className="eyebrow">FICHA DO CLIENTE</span><h2 id="detail-title">{client.name}</h2><p>{client.phone || "Telefone não informado"}</p><CustomerStatusBadge status={client.customerStatus ?? "active"} /></div>
         <div className="detail-body">
           <div className="detail-section">
             <div className="detail-section-heading"><span className="detail-icon"><Tv size={17} /></span><div><strong>Painel e plano</strong><small>Informações do cadastro</small></div></div>
@@ -313,7 +318,7 @@ function ClientDetailModal({ client, onClose, onEdit, onDelete, onCopy }: Client
               <div className="detail-item"><span>Aplicativo</span><strong>{client.app || "—"}</strong></div>
               <div className="detail-item"><span>Compra</span><strong>{formatDate(client.purchaseDate)}</strong></div>
               <div className="detail-item"><span>Expiração</span><strong>{formatDate(client.expirationDate)}</strong></div>
-              <div className="detail-item"><span>Situação</span><strong className={"detail-status-text text-" + status}>{expirationLabel(client.expirationDate)}</strong></div>
+              <div className="detail-item"><span>Situação do plano</span><strong className={"detail-status-text text-" + status}>{expirationLabel(client.expirationDate)}</strong></div>
             </div>
           </div>
           <div className="detail-section">
@@ -336,6 +341,7 @@ function Index() {
   const [loaded, setLoaded] = useState(false);
   const [storageWarning, setStorageWarning] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [customerStatusFilter, setCustomerStatusFilter] = useState<CustomerAccountFilter>("all");
   const [selectedPanel, setSelectedPanel] = useState<PanelName | "all">("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [formOpen, setFormOpen] = useState(false);
@@ -382,11 +388,14 @@ function Index() {
   }, [toast]);
 
   const counts = useMemo(() => {
-    const scopedClients = selectedPanel === "all" ? clients : clients.filter((client) => client.panel === selectedPanel);
+    const panelClients = selectedPanel === "all" ? clients : clients.filter((client) => client.panel === selectedPanel);
+    const scopedClients = customerStatusFilter === "all"
+      ? panelClients
+      : panelClients.filter((client) => (client.customerStatus ?? "active") === customerStatusFilter);
     const result = { all: scopedClients.length, active: 0, expiring: 0, expired: 0 };
     scopedClients.forEach((client) => { result[getClientStatus(client)] += 1; });
     return result;
-  }, [clients, selectedPanel]);
+  }, [clients, customerStatusFilter, selectedPanel]);
 
   const panelCounts = useMemo(() => {
     const result: Record<PanelName, number> = {};
@@ -400,9 +409,10 @@ function Index() {
     return clients
       .filter((client) => statusFilter === "all" || getClientStatus(client) === statusFilter)
       .filter((client) => selectedPanel === "all" || client.panel === selectedPanel)
+      .filter((client) => customerStatusFilter === "all" || (client.customerStatus ?? "active") === customerStatusFilter)
       .filter((client) => !query || [client.name, client.phone, client.panel, client.panelNumber, client.username, client.plan].some((value) => value.toLocaleLowerCase("pt-BR").includes(query)))
       .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
-  }, [clients, searchTerm, selectedPanel, statusFilter]);
+  }, [clients, customerStatusFilter, searchTerm, selectedPanel, statusFilter]);
 
   const recentClients = useMemo(() => [...clients].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5), [clients]);
 
@@ -464,6 +474,7 @@ function Index() {
   function goToClients(panel: PanelName | "all" = "all", filter: StatusFilter = "all") {
     setSelectedPanel(panel);
     setStatusFilter(filter);
+    setCustomerStatusFilter("all");
     setPage("clients");
     setMobileNavOpen(false);
   }
@@ -474,6 +485,7 @@ function Index() {
     if (nextPage !== "clients") {
       setSelectedPanel("all");
       setStatusFilter("all");
+      setCustomerStatusFilter("all");
     }
   }
 
@@ -533,7 +545,7 @@ function Index() {
           {page === "overview" && <>
             <section className="stats-grid" aria-label="Resumo dos clientes">
               <button className="stat-card stat-total" onClick={() => goToClients("all", "all")}><span className="stat-icon"><UsersRound size={19} /></span><span className="stat-label">Total de clientes</span><strong>{counts.all}</strong><span className="stat-foot"><span>Base cadastrada</span><ArrowUpRight size={14} /></span></button>
-              <button className="stat-card stat-active" onClick={() => goToClients("all", "active")}><span className="stat-icon"><Check size={19} /></span><span className="stat-label">Clientes ativos</span><strong>{counts.active}</strong><span className="stat-foot"><span>Mais de 7 dias até vencer</span><ArrowUpRight size={14} /></span></button>
+              <button className="stat-card stat-active" onClick={() => goToClients("all", "active")}><span className="stat-icon"><Check size={19} /></span><span className="stat-label">Planos vigentes</span><strong>{counts.active}</strong><span className="stat-foot"><span>Mais de 7 dias até vencer</span><ArrowUpRight size={14} /></span></button>
               <button className="stat-card stat-expiring" onClick={() => goToClients("all", "expiring")}><span className="stat-icon"><Clock3 size={19} /></span><span className="stat-label">Vencem em breve</span><strong>{counts.expiring}</strong><span className="stat-foot"><span>Nos próximos 7 dias</span><ArrowDownRight size={14} /></span></button>
               <button className="stat-card stat-expired" onClick={() => goToClients("all", "expired")}><span className="stat-icon"><CircleAlert size={19} /></span><span className="stat-label">Expirados</span><strong>{counts.expired}</strong><span className="stat-foot"><span>Precisam de renovação</span><ArrowDownRight size={14} /></span></button>
             </section>
@@ -556,9 +568,9 @@ function Index() {
           </>}
 
           {page === "clients" && <section className="content-card clients-card">
-            <div className="card-heading clients-card-heading"><div><h2>{selectedPanel === "all" ? "Todos os clientes" : "Painel " + selectedPanel}</h2><p>{visibleClients.length} {visibleClients.length === 1 ? "cadastro encontrado" : "cadastros encontrados"}</p></div><label className="filter-select"><span className="sr-only">Filtrar por painel</span><select value={selectedPanel} onChange={(event) => setSelectedPanel(event.target.value)}><option value="all">Todos os painéis</option>{panels.map((panel) => <option key={panel} value={panel}>{panel}</option>)}</select><ChevronDown size={15} /></label></div>
-            <div className="status-filters" role="group" aria-label="Filtrar por situação">
-              {([["all", "Todos", counts.all], ["active", "Ativos", counts.active], ["expiring", "Vencem em breve", counts.expiring], ["expired", "Expirados", counts.expired]] as const).map(([filter, label, count]) => <button key={filter} className={"filter-tab" + (statusFilter === filter ? " filter-tab-active" : "")} onClick={() => setStatusFilter(filter)}>{label}<span>{count}</span></button>)}
+            <div className="card-heading clients-card-heading"><div><h2>{selectedPanel === "all" ? "Todos os clientes" : "Painel " + selectedPanel}</h2><p>{visibleClients.length} {visibleClients.length === 1 ? "cadastro encontrado" : "cadastros encontrados"}</p></div><div className="clients-heading-filters"><label className="filter-select"><span className="sr-only">Filtrar por painel</span><select value={selectedPanel} onChange={(event) => setSelectedPanel(event.target.value)}><option value="all">Todos os painéis</option>{panels.map((panel) => <option key={panel} value={panel}>{panel}</option>)}</select><ChevronDown size={15} /></label><label className="filter-select"><span className="sr-only">Filtrar por situação do cliente</span><select value={customerStatusFilter} onChange={(event) => setCustomerStatusFilter(event.target.value as CustomerAccountFilter)}><option value="all">Todos os clientes</option><option value="active">Clientes ativos</option><option value="inactive">Clientes inativos</option></select><ChevronDown size={15} /></label></div></div>
+            <div className="status-filters" role="group" aria-label="Filtrar por situação do plano">
+              {([["all", "Todos", counts.all], ["active", "Vigentes", counts.active], ["expiring", "Vencem em breve", counts.expiring], ["expired", "Expirados", counts.expired]] as const).map(([filter, label, count]) => <button key={filter} className={"filter-tab" + (statusFilter === filter ? " filter-tab-active" : "")} onClick={() => setStatusFilter(filter)}>{label}<span>{count}</span></button>)}
             </div>
             <ClientTable clients={visibleClients} onView={setViewingClient} onEdit={openEdit} onDelete={setDeleteTarget} onCreate={openCreate} />
           </section>}

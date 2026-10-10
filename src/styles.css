@@ -1005,6 +1005,11 @@ textarea:focus-visible {
   background: oklch(0.95 0.035 155);
 }
 
+.status-inactive {
+  color: oklch(0.49 0.025 255);
+  background: oklch(0.95 0.015 255);
+}
+
 .status-expiring {
   color: oklch(0.53 0.13 72);
   background: oklch(0.97 0.04 82);
@@ -1223,6 +1228,11 @@ textarea:focus-visible {
 
 .clients-card-heading {
   padding-bottom: 14px;
+}
+
+.clients-heading-filters {
+  display: flex;
+  gap: 8px;
 }
 
 .filter-select {
@@ -2282,6 +2292,11 @@ textarea:focus-visible {
 
   .clients-card-heading {
     align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .clients-heading-filters {
+    width: 100%;
     flex-direction: column;
   }
 
