@@ -45,11 +45,13 @@ export type AuthSession = {
 };
 
 const SESSION_STORAGE_KEY = "iptv-client-manager.auth-session.v1";
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.replace(/\/$/, "") ?? "";
+const supabaseUrl =
+  import.meta.env.VITE_SUPABASE_URL?.replace(/\/$/, "") ??
+  "https://jgzclfpkklxozwiysxoq.supabase.co";
 const supabaseKey =
   import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ??
   import.meta.env.VITE_SUPABASE_ANON_KEY ??
-  "";
+  "sb_publishable_f75B8TZoEgnH_gXMNqnQmQ_a5D25H3m";
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseKey);
 
