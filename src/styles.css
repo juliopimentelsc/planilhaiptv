@@ -1856,6 +1856,10 @@ textarea:focus-visible {
   gap: 3px;
 }
 
+.detail-item-wide {
+  grid-column: 1 / -1;
+}
+
 .detail-item span,
 .credential-row > span {
   color: var(--muted);

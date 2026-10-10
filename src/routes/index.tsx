@@ -33,6 +33,10 @@ type Client = {
   plan: string;
   app?: string;
   customerStatus?: CustomerAccountStatus;
+  renewalLink?: string;
+  price?: string;
+  accountCreatedAt?: string;
+  connections?: string;
   notes: string;
   createdAt: string;
 };
@@ -44,9 +48,16 @@ function todayIso() {
   return [now.getFullYear(), String(now.getMonth() + 1).padStart(2, "0"), String(now.getDate()).padStart(2, "0")].join("-");
 }
 
+function toDateTimeLocal(value: string, endOfDay = false) {
+  if (!value) return "";
+  if (value.includes("T")) return value;
+  return value + (endOfDay ? "T23:59:59" : "T00:00:00");
+}
+
 const EMPTY_FORM: ClientFields = {
   name: "", phone: "", panel: "Atmos", panelNumber: "", username: "", password: "",
-  purchaseDate: todayIso(), expirationDate: "", plan: "", app: "", customerStatus: "active", notes: "",
+  purchaseDate: todayIso(), expirationDate: "", plan: "", app: "", customerStatus: "active",
+  renewalLink: "", price: "", accountCreatedAt: "", connections: "", notes: "",
 };
 
 function normalizePanelNames(value: unknown): PanelName[] {
@@ -64,7 +75,7 @@ function normalizePanelNames(value: unknown): PanelName[] {
 }
 
 function dateOrdinal(value: string) {
-  const [year, month, day] = value.split("-").map(Number);
+  const [year, month, day] = value.slice(0, 10).split("-").map(Number);
   return Math.floor(Date.UTC(year ?? 1970, (month ?? 1) - 1, day ?? 1) / 86_400_000);
 }
 
@@ -81,8 +92,19 @@ function getClientStatus(client: Client): ClientStatus {
 
 function formatDate(value: string) {
   if (!value) return "—";
-  const [year, month, day] = value.split("-");
-  return day + "/" + month + "/" + year;
+  const [date, time] = value.split("T");
+  const [year, month, day] = (date ?? value).split("-");
+  return day + "/" + month + "/" + year + (time ? " " + time : "");
+}
+
+function safeHttpUrl(value?: string) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
 }
 
 function expirationLabel(value: string) {
@@ -116,6 +138,10 @@ function isClient(value: unknown): value is Client {
     typeof client["plan"] === "string" &&
     (typeof client["app"] === "undefined" || typeof client["app"] === "string") &&
     (typeof client["customerStatus"] === "undefined" || client["customerStatus"] === "active" || client["customerStatus"] === "inactive") &&
+    (typeof client["renewalLink"] === "undefined" || typeof client["renewalLink"] === "string") &&
+    (typeof client["price"] === "undefined" || typeof client["price"] === "string") &&
+    (typeof client["accountCreatedAt"] === "undefined" || typeof client["accountCreatedAt"] === "string") &&
+    (typeof client["connections"] === "undefined" || typeof client["connections"] === "string") &&
     typeof client["notes"] === "string" &&
     typeof client["createdAt"] === "string";
 }
@@ -187,8 +213,10 @@ function ClientFormModal({ client, panels, onClose, onSave }: ClientFormModalPro
   const [form, setForm] = useState<ClientFields>(() => client ? {
     name: client.name, phone: client.phone, panel: client.panel, panelNumber: client.panelNumber,
     username: client.username, password: client.password, purchaseDate: client.purchaseDate,
-    expirationDate: client.expirationDate, plan: client.plan, app: client.app ?? "",
-    customerStatus: client.customerStatus ?? "active", notes: client.notes,
+    expirationDate: toDateTimeLocal(client.expirationDate, true), plan: client.plan, app: client.app ?? "",
+    customerStatus: client.customerStatus ?? "active", renewalLink: client.renewalLink ?? "",
+    price: client.price ?? "", accountCreatedAt: client.accountCreatedAt ?? "",
+    connections: client.connections ?? "", notes: client.notes,
   } : { ...EMPTY_FORM, purchaseDate: todayIso() });
   const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState("");
@@ -199,7 +227,7 @@ function ClientFormModal({ client, panels, onClose, onSave }: ClientFormModalPro
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (form.expirationDate < form.purchaseDate) {
+    if (toDateTimeLocal(form.expirationDate, true) < toDateTimeLocal(form.purchaseDate)) {
       setFormError("A data de vencimento precisa ser igual ou posterior à compra.");
       return;
     }
@@ -232,8 +260,12 @@ function ClientFormModal({ client, panels, onClose, onSave }: ClientFormModalPro
             <div className="form-section-title"><span className="form-step">03</span><div><strong>Plano e período</strong><small>Informe o plano contratado, a compra e o próximo vencimento.</small></div></div>
             <div className="form-grid">
               <label className="field"><span>Plano comprado <b>*</b></span><input required maxLength={60} value={form.plan} onChange={(event) => update("plan", event.target.value)} placeholder="Ex.: 30 dias, 3 meses, anual" /></label>
+              <label className="field"><span>Preço do plano</span><input inputMode="decimal" maxLength={40} value={form.price ?? ""} onChange={(event) => update("price", event.target.value)} placeholder="Ex.: R$ 132,00" /></label>
               <label className="field"><span>Data da compra <b>*</b></span><input required type="date" value={form.purchaseDate} onChange={(event) => update("purchaseDate", event.target.value)} /></label>
-              <label className="field"><span>Data de expiração <b>*</b></span><input required type="date" min={form.purchaseDate} value={form.expirationDate} onChange={(event) => update("expirationDate", event.target.value)} /></label>
+              <label className="field"><span>Criado em</span><input type="datetime-local" step={1} value={form.accountCreatedAt ?? ""} onChange={(event) => update("accountCreatedAt", event.target.value)} /></label>
+              <label className="field"><span>Vencimento <b>*</b></span><input required type="datetime-local" step={1} min={toDateTimeLocal(form.purchaseDate)} value={toDateTimeLocal(form.expirationDate, true)} onChange={(event) => update("expirationDate", event.target.value)} /></label>
+              <label className="field"><span>Conexões</span><input type="number" min={1} step={1} max={99} value={form.connections ?? ""} onChange={(event) => update("connections", event.target.value)} placeholder="Ex.: 1" /></label>
+              <label className="field field-span-2"><span>Link de renovação</span><input type="url" maxLength={300} value={form.renewalLink ?? ""} onChange={(event) => update("renewalLink", event.target.value)} placeholder="https://..." /></label>
               <label className="field"><span>Aplicativo utilizado pelo cliente</span><input maxLength={80} value={form.app ?? ""} onChange={(event) => update("app", event.target.value)} placeholder="Ex.: Smart IPTV, XCIPTV" /></label>
               <label className="field field-span-2"><span>Observações</span><textarea rows={2} maxLength={300} value={form.notes} onChange={(event) => update("notes", event.target.value)} placeholder="Anotações internas sobre este cliente (opcional)" /></label>
             </div>
@@ -304,6 +336,7 @@ type ClientDetailModalProps = {
 function ClientDetailModal({ client, onClose, onEdit, onDelete, onCopy }: ClientDetailModalProps) {
   const [showPassword, setShowPassword] = useState(false);
   const status = getClientStatus(client);
+  const renewalUrl = safeHttpUrl(client.renewalLink);
   return (
     <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <section className="modal-card detail-modal" role="dialog" aria-modal="true" aria-labelledby="detail-title">
@@ -315,10 +348,14 @@ function ClientDetailModal({ client, onClose, onEdit, onDelete, onCopy }: Client
               <div className="detail-item"><span>Painel</span><strong>{client.panel}</strong></div>
               <div className="detail-item"><span>Nº do painel</span><strong>{client.panelNumber || "—"}</strong></div>
               <div className="detail-item"><span>Plano comprado</span><strong>{client.plan || "—"}</strong></div>
+              <div className="detail-item"><span>Preço do plano</span><strong>{client.price || "—"}</strong></div>
               <div className="detail-item"><span>Aplicativo</span><strong>{client.app || "—"}</strong></div>
+              <div className="detail-item"><span>Criado em</span><strong>{formatDate(client.accountCreatedAt ?? "")}</strong></div>
               <div className="detail-item"><span>Compra</span><strong>{formatDate(client.purchaseDate)}</strong></div>
-              <div className="detail-item"><span>Expiração</span><strong>{formatDate(client.expirationDate)}</strong></div>
+              <div className="detail-item"><span>Vencimento</span><strong>{formatDate(client.expirationDate)}</strong></div>
               <div className="detail-item"><span>Situação do plano</span><strong className={"detail-status-text text-" + status}>{expirationLabel(client.expirationDate)}</strong></div>
+              <div className="detail-item"><span>Conexões</span><strong>{client.connections || "—"}</strong></div>
+              <div className="detail-item detail-item-wide"><span>Link de renovação</span><strong>{renewalUrl ? <a href={renewalUrl} target="_blank" rel="noopener noreferrer">Abrir link de renovação</a> : client.renewalLink || "—"}</strong></div>
             </div>
           </div>
           <div className="detail-section">
