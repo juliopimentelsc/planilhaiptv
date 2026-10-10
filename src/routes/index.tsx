@@ -1,620 +1,495 @@
 import { createFileRoute } from "@tanstack/react-router";
 import {
-  ArrowRight,
-  CalendarDays,
-  Check,
-  ChevronDown,
-  Clock3,
-  Dog,
-  FileText,
-  Footprints,
-  Heart,
-  ListChecks,
-  PawPrint,
-  ShieldCheck,
-  Sparkles,
-  TriangleAlert,
-  Video,
+  AlertTriangle, ArrowDownRight, ArrowRight, ArrowUpRight, CalendarDays, Check,
+  ChevronDown, CircleAlert, Clock3, Copy, Database, Eye, EyeOff, LayoutDashboard,
+  Menu, MessageCircle, Pencil, Plus, Search, Server, ShieldCheck, Trash2, Tv,
+  UsersRound, X, type LucideIcon,
 } from "lucide-react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 
-export const Route = createFileRoute("/")({
-  component: Index,
-});
+export const Route = createFileRoute("/")({ component: Index });
 
-const CHECKOUT_URL = "";
+const PANELS = ["Atmos", "Cinemax", "Luma TV", "Nexus", "Espace One Play", "Slim Plus", "Aura TV+"] as const;
+const STORAGE_KEY = "iptv-client-manager.clients.v1";
 
-const steps = [
-  {
-    number: "01",
-    days: "DIAS 1 A 3",
-    title: "Atenção",
-    description:
-      "Seu cão aprende a voltar a atenção para você antes de sair puxando. O começo acontece em casa, com calma.",
-    icon: Sparkles,
-    tone: "mint",
-  },
-  {
-    number: "02",
-    days: "DIAS 4 A 10",
-    title: "Guia frouxa",
-    description:
-      "Você pratica o caminhar ao seu lado primeiro dentro de casa e depois leva o treino para a rua.",
-    icon: Footprints,
-    tone: "sun",
-  },
-  {
-    number: "03",
-    days: "DIAS 11 A 14",
-    title: "Distrações",
-    description:
-      "O protocolo avança para cheiros, barulhos e outros cães, respeitando o ritmo de vocês.",
-    icon: Heart,
-    tone: "rose",
-  },
-];
+type PanelName = (typeof PANELS)[number];
+type Page = "overview" | "clients" | "panels";
+type ClientStatus = "active" | "expiring" | "expired";
+type StatusFilter = "all" | ClientStatus;
 
-const deliverables = [
-  {
-    number: "01",
-    label: "PRINCIPAL",
-    title: "Protocolo de 14 Dias",
-    description:
-      "A tarefa de cada dia, na ordem certa. Abra, leia e saiba o que praticar no passeio.",
-    icon: FileText,
-  },
-  {
-    number: "02",
-    label: "DENTRO DO GUIA",
-    title: "Vídeos dos exercícios",
-    description:
-      "Demonstrações curtas para você ver cada exercício na prática e começar com mais segurança.",
-    icon: Video,
-  },
-  {
-    number: "03",
-    label: "BÔNUS 1",
-    title: "Guia dos Primeiros 3 Dias",
-    description:
-      "Um roteiro simples para saber por onde começar e o que fazer logo nos primeiros passeios.",
-    icon: CalendarDays,
-  },
-  {
-    number: "04",
-    label: "BÔNUS 2",
-    title: "Treino Expresso de 5 Minutos",
-    description:
-      "Uma versão curta do treino para encaixar na rotina quando o tempo estiver apertado.",
-    icon: Clock3,
-  },
-  {
-    number: "05",
-    label: "BÔNUS 3",
-    title: "Os 7 Erros Que Fazem o Cão Puxar Ainda Mais",
-    description:
-      "Veja quais hábitos evitar para não aumentar a tensão na guia durante o passeio.",
-    icon: TriangleAlert,
-  },
-  {
-    number: "06",
-    label: "BÔNUS 4",
-    title: "App/Planilha de Progresso",
-    description:
-      "Registre o avanço de cada dia e acompanhe o próximo passo do protocolo.",
-    icon: ListChecks,
-  },
-];
+type Client = {
+  id: string;
+  name: string;
+  phone: string;
+  panel: PanelName;
+  panelNumber: string;
+  username: string;
+  password: string;
+  purchaseDate: string;
+  expirationDate: string;
+  plan: string;
+  notes: string;
+  createdAt: string;
+};
 
-const offerItems = [
-  { title: "Protocolo de 14 Dias (PDF)", value: "R$ 97" },
-  { title: "Vídeos dos exercícios", value: "R$ 57" },
-  { title: "Guia dos Primeiros 3 Dias", value: "R$ 27" },
-  { title: "Treino Expresso de 5 Minutos", value: "R$ 27" },
-  { title: "Os 7 Erros", value: "R$ 27" },
-  { title: "App/Planilha de Progresso", value: "R$ 61" },
-];
+type ClientFields = Omit<Client, "id" | "createdAt">;
 
-function CheckoutAction({ label }: { label: string }) {
-  if (CHECKOUT_URL) {
+function todayIso() {
+  const now = new Date();
+  return [now.getFullYear(), String(now.getMonth() + 1).padStart(2, "0"), String(now.getDate()).padStart(2, "0")].join("-");
+}
+
+const EMPTY_FORM: ClientFields = {
+  name: "", phone: "", panel: "Atmos", panelNumber: "", username: "", password: "",
+  purchaseDate: todayIso(), expirationDate: "", plan: "", notes: "",
+};
+
+function dateOrdinal(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return Math.floor(Date.UTC(year ?? 1970, (month ?? 1) - 1, day ?? 1) / 86_400_000);
+}
+
+function daysUntil(value: string) {
+  return dateOrdinal(value) - dateOrdinal(todayIso());
+}
+
+function getClientStatus(client: Client): ClientStatus {
+  const remaining = daysUntil(client.expirationDate);
+  if (remaining < 0) return "expired";
+  if (remaining <= 7) return "expiring";
+  return "active";
+}
+
+function formatDate(value: string) {
+  if (!value) return "—";
+  const [year, month, day] = value.split("-");
+  return day + "/" + month + "/" + year;
+}
+
+function expirationLabel(value: string) {
+  const remaining = daysUntil(value);
+  if (remaining < 0) {
+    const days = Math.abs(remaining);
+    return "Expirou há " + days + (days === 1 ? " dia" : " dias");
+  }
+  if (remaining === 0) return "Vence hoje";
+  if (remaining === 1) return "Vence amanhã";
+  return "Vence em " + remaining + " dias";
+}
+
+function initials(name: string) {
+  return name.trim().split(/\s+/).slice(0, 2).map((part) => part.charAt(0).toUpperCase()).join("") || "CL";
+}
+
+function isClient(value: unknown): value is Client {
+  if (typeof value !== "object" || value === null) return false;
+  const client = value as Record<string, unknown>;
+  return typeof client["id"] === "string" &&
+    typeof client["name"] === "string" &&
+    typeof client["panel"] === "string" &&
+    PANELS.includes(client["panel"] as PanelName) &&
+    typeof client["phone"] === "string" &&
+    typeof client["panelNumber"] === "string" &&
+    typeof client["username"] === "string" &&
+    typeof client["password"] === "string" &&
+    typeof client["purchaseDate"] === "string" &&
+    typeof client["expirationDate"] === "string" &&
+    typeof client["plan"] === "string" &&
+    typeof client["notes"] === "string" &&
+    typeof client["createdAt"] === "string";
+}
+
+function makeId() {
+  return globalThis.crypto?.randomUUID?.() ?? String(Date.now()) + "-" + Math.random().toString(36).slice(2, 10);
+}
+
+function StatusBadge({ status }: { status: ClientStatus }) {
+  const labels: Record<ClientStatus, string> = { active: "Ativo", expiring: "Vence em breve", expired: "Expirado" };
+  const Icon = status === "active" ? Check : status === "expiring" ? Clock3 : CircleAlert;
+  return <span className={"status-badge status-" + status}><Icon size={13} strokeWidth={2.3} />{labels[status]}</span>;
+}
+
+type ClientTableProps = {
+  clients: Client[];
+  onView: (client: Client) => void;
+  onEdit: (client: Client) => void;
+  onDelete: (client: Client) => void;
+  onCreate: () => void;
+  compact?: boolean;
+};
+
+function ClientTable({ clients, onView, onEdit, onDelete, onCreate, compact = false }: ClientTableProps) {
+  if (clients.length === 0) {
     return (
-      <a className="sales-button" href={CHECKOUT_URL}>
-        {label}
-        <ArrowRight aria-hidden="true" size={18} />
-      </a>
+      <div className="empty-state">
+        <div className="empty-icon"><UsersRound size={22} /></div>
+        <h3>Nenhum cliente por aqui</h3>
+        <p>Cadastre seu primeiro cliente para acompanhar painel, acesso e vencimento.</p>
+        <button className="button button-primary button-small" onClick={onCreate}><Plus size={16} /> Cadastrar cliente</button>
+      </div>
     );
   }
-
   return (
-    <button className="sales-button" type="button" disabled>
-      {label}
-      <ArrowRight aria-hidden="true" size={18} />
-    </button>
+    <div className={"table-wrap" + (compact ? " table-compact" : "")}>
+      <table className="client-table">
+        <thead><tr><th>Cliente</th><th>Painel</th><th>Plano</th><th>Vencimento</th><th>Status</th><th><span className="sr-only">Ações</span></th></tr></thead>
+        <tbody>
+          {clients.map((client) => {
+            const status = getClientStatus(client);
+            return (
+              <tr key={client.id} onClick={() => onView(client)}>
+                <td><div className="customer-cell"><div className="customer-avatar">{initials(client.name)}</div><div className="customer-copy"><strong>{client.name}</strong><span>{client.phone || client.username}</span></div></div></td>
+                <td><span className="panel-cell"><span className="panel-dot"><Tv size={13} /></span>{client.panel}</span>{client.panelNumber && <span className="sub-cell">Painel {client.panelNumber}</span>}</td>
+                <td><span className="plan-cell">{client.plan || "—"}</span></td>
+                <td><strong className="date-cell">{formatDate(client.expirationDate)}</strong><span className="sub-cell">{expirationLabel(client.expirationDate)}</span></td>
+                <td><StatusBadge status={status} /></td>
+                <td><div className="row-actions" onClick={(event) => event.stopPropagation()}>
+                  <button className="icon-button" aria-label={"Editar " + client.name} title="Editar" onClick={() => onEdit(client)}><Pencil size={15} /></button>
+                  <button className="icon-button icon-button-danger" aria-label={"Excluir " + client.name} title="Excluir" onClick={() => onDelete(client)}><Trash2 size={15} /></button>
+                </div></td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
-function PriceCard() {
+type ClientFormModalProps = {
+  client: Client | null;
+  onClose: () => void;
+  onSave: (fields: ClientFields, client: Client | null) => void;
+};
+
+function ClientFormModal({ client, onClose, onSave }: ClientFormModalProps) {
+  const [form, setForm] = useState<ClientFields>(() => client ? {
+    name: client.name, phone: client.phone, panel: client.panel, panelNumber: client.panelNumber,
+    username: client.username, password: client.password, purchaseDate: client.purchaseDate,
+    expirationDate: client.expirationDate, plan: client.plan, notes: client.notes,
+  } : { ...EMPTY_FORM, purchaseDate: todayIso() });
+  const [showPassword, setShowPassword] = useState(false);
+  const [formError, setFormError] = useState("");
+
+  function update<K extends keyof ClientFields>(key: K, value: ClientFields[K]) {
+    setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (form.expirationDate < form.purchaseDate) {
+      setFormError("A data de vencimento precisa ser igual ou posterior à compra.");
+      return;
+    }
+    onSave(form, client);
+  }
+
   return (
-    <div className="price-card">
-      <div className="price-card-heading">
-        <div>
-          <p className="price-eyebrow">ACESSO COMPLETO</p>
-          <h3>Guia Não Puxa Mais</h3>
+    <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className="modal-card client-form-modal" role="dialog" aria-modal="true" aria-labelledby="form-title">
+        <div className="modal-heading"><div><span className="eyebrow">{client ? "ATUALIZE OS DADOS" : "NOVO CADASTRO"}</span><h2 id="form-title">{client ? "Editar cliente" : "Cadastrar cliente"}</h2><p>Preencha as informações do acesso e do plano contratado.</p></div><button className="icon-button modal-close" aria-label="Fechar" onClick={onClose}><X size={19} /></button></div>
+        <form onSubmit={submit}>
+          <div className="form-section">
+            <div className="form-section-title"><span className="form-step">01</span><div><strong>Dados do cliente</strong><small>Como você identifica este cadastro?</small></div></div>
+            <div className="form-grid">
+              <label className="field field-span-2"><span>Nome do cliente <b>*</b></span><input autoFocus required maxLength={90} value={form.name} onChange={(event) => update("name", event.target.value)} placeholder="Ex.: Ana Souza" /></label>
+              <label className="field"><span>WhatsApp / telefone</span><input type="tel" maxLength={30} value={form.phone} onChange={(event) => update("phone", event.target.value)} placeholder="(11) 99999-9999" /></label>
+              <label className="field"><span>Plano comprado <b>*</b></span><input required maxLength={60} value={form.plan} onChange={(event) => update("plan", event.target.value)} placeholder="Ex.: Mensal, trimestral" /></label>
+            </div>
+          </div>
+          <div className="form-section">
+            <div className="form-section-title"><span className="form-step">02</span><div><strong>Painel e acesso</strong><small>Dados usados para localizar a conta.</small></div></div>
+            <div className="form-grid">
+              <label className="field"><span>Painel <b>*</b></span><span className="select-wrap"><select required value={form.panel} onChange={(event) => update("panel", event.target.value as PanelName)}>{PANELS.map((panel) => <option key={panel} value={panel}>{panel}</option>)}</select><ChevronDown size={16} /></span></label>
+              <label className="field"><span>Nº do painel <b>*</b></span><input required maxLength={40} value={form.panelNumber} onChange={(event) => update("panelNumber", event.target.value)} placeholder="Ex.: 01 ou servidor 2" /></label>
+              <label className="field"><span>Login / usuário <b>*</b></span><input required maxLength={100} autoComplete="off" value={form.username} onChange={(event) => update("username", event.target.value)} placeholder="Usuário de acesso" /></label>
+              <label className="field"><span>Senha <b>*</b></span><span className="input-with-action"><input required maxLength={120} autoComplete="new-password" type={showPassword ? "text" : "password"} value={form.password} onChange={(event) => update("password", event.target.value)} placeholder="Senha de acesso" /><button type="button" className="field-action" aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"} onClick={() => setShowPassword((value) => !value)}>{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button></span></label>
+            </div>
+          </div>
+          <div className="form-section">
+            <div className="form-section-title"><span className="form-step">03</span><div><strong>Período do plano</strong><small>Acompanhe a compra e o próximo vencimento.</small></div></div>
+            <div className="form-grid">
+              <label className="field"><span>Data da compra <b>*</b></span><input required type="date" value={form.purchaseDate} onChange={(event) => update("purchaseDate", event.target.value)} /></label>
+              <label className="field"><span>Data de expiração <b>*</b></span><input required type="date" min={form.purchaseDate} value={form.expirationDate} onChange={(event) => update("expirationDate", event.target.value)} /></label>
+              <label className="field field-span-2"><span>Observações</span><textarea rows={2} maxLength={300} value={form.notes} onChange={(event) => update("notes", event.target.value)} placeholder="Anotações internas sobre este cliente (opcional)" /></label>
+            </div>
+            {formError && <p className="form-error"><AlertTriangle size={15} />{formError}</p>}
+          </div>
+          <div className="form-footer"><span className="required-note"><b>*</b> Campos obrigatórios</span><div className="form-buttons"><button type="button" className="button button-secondary" onClick={onClose}>Cancelar</button><button type="submit" className="button button-primary"><Check size={16} />{client ? "Salvar alterações" : "Salvar cliente"}</button></div></div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+type ClientDetailModalProps = {
+  client: Client;
+  onClose: () => void;
+  onEdit: (client: Client) => void;
+  onDelete: (client: Client) => void;
+  onCopy: (label: string, value: string) => void;
+};
+
+function ClientDetailModal({ client, onClose, onEdit, onDelete, onCopy }: ClientDetailModalProps) {
+  const [showPassword, setShowPassword] = useState(false);
+  const status = getClientStatus(client);
+  return (
+    <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className="modal-card detail-modal" role="dialog" aria-modal="true" aria-labelledby="detail-title">
+        <div className="detail-cover"><button className="icon-button detail-close" aria-label="Fechar" onClick={onClose}><X size={19} /></button><div className="detail-avatar">{initials(client.name)}</div><span className="eyebrow">FICHA DO CLIENTE</span><h2 id="detail-title">{client.name}</h2><p>{client.phone || "Telefone não informado"}</p><StatusBadge status={status} /></div>
+        <div className="detail-body">
+          <div className="detail-section">
+            <div className="detail-section-heading"><span className="detail-icon"><Tv size={17} /></span><div><strong>Painel e plano</strong><small>Informações do cadastro</small></div></div>
+            <div className="detail-grid">
+              <div className="detail-item"><span>Painel</span><strong>{client.panel}</strong></div>
+              <div className="detail-item"><span>Nº do painel</span><strong>{client.panelNumber || "—"}</strong></div>
+              <div className="detail-item"><span>Plano comprado</span><strong>{client.plan || "—"}</strong></div>
+              <div className="detail-item"><span>Compra</span><strong>{formatDate(client.purchaseDate)}</strong></div>
+              <div className="detail-item"><span>Expiração</span><strong>{formatDate(client.expirationDate)}</strong></div>
+              <div className="detail-item"><span>Situação</span><strong className={"detail-status-text text-" + status}>{expirationLabel(client.expirationDate)}</strong></div>
+            </div>
+          </div>
+          <div className="detail-section">
+            <div className="detail-section-heading"><span className="detail-icon"><ShieldCheck size={17} /></span><div><strong>Dados de acesso</strong><small>Visíveis somente ao abrir esta ficha</small></div></div>
+            <div className="credential-row"><span>Login / usuário</span><strong>{client.username || "—"}</strong><button className="icon-button" aria-label="Copiar login" title="Copiar login" onClick={() => onCopy("Login", client.username)}><Copy size={15} /></button></div>
+            <div className="credential-row"><span>Senha</span><strong className="credential-password">{showPassword ? client.password : "••••••••••"}</strong><button className="icon-button" aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"} title={showPassword ? "Ocultar senha" : "Mostrar senha"} onClick={() => setShowPassword((value) => !value)}>{showPassword ? <EyeOff size={15} /> : <Eye size={15} />}</button><button className="icon-button" aria-label="Copiar senha" title="Copiar senha" onClick={() => onCopy("Senha", client.password)}><Copy size={15} /></button></div>
+          </div>
+          {client.notes && <div className="notes-panel"><span>OBSERVAÇÕES</span><p>{client.notes}</p></div>}
         </div>
-        <div className="price-mark" aria-hidden="true">
-          <PawPrint size={24} strokeWidth={1.8} />
-        </div>
-      </div>
-
-      <ul className="offer-list">
-        {offerItems.map((item) => (
-          <li key={item.title}>
-            <span className="offer-check">
-              <Check aria-hidden="true" size={14} />
-            </span>
-            <span>{item.title}</span>
-            <span className="offer-value">{item.value}</span>
-          </li>
-        ))}
-      </ul>
-
-      <div className="price-total">
-        <span>Valor dos itens separados</span>
-        <strong>R$ 296</strong>
-      </div>
-
-      <div className="price-now">
-        <span>Hoje, à vista</span>
-        <strong>
-          <span className="currency">R$</span> 37
-        </strong>
-      </div>
-
-      <CheckoutAction label="Sim, quero garantir por R$ 37" />
-      <p className="checkout-note">
-        O link de pagamento será conectado quando você informar o checkout.
-      </p>
-      <p className="price-guarantee">
-        <ShieldCheck aria-hidden="true" size={16} />
-        7 dias de garantia incondicional
-      </p>
+        <div className="detail-footer"><button className="button button-danger-ghost" onClick={() => onDelete(client)}><Trash2 size={16} />Excluir</button><div className="form-buttons"><button className="button button-secondary" onClick={onClose}>Fechar</button><button className="button button-primary" onClick={() => onEdit(client)}><Pencil size={16} />Editar cadastro</button></div></div>
+      </section>
     </div>
   );
 }
 
 function Index() {
+  const [page, setPage] = useState<Page>("overview");
+  const [clients, setClients] = useState<Client[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [storageWarning, setStorageWarning] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [selectedPanel, setSelectedPanel] = useState<PanelName | "all">("all");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [viewingClient, setViewingClient] = useState<Client | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Client | null>(null);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [toast, setToast] = useState("");
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed: unknown = JSON.parse(saved);
+        if (Array.isArray(parsed)) setClients(parsed.filter(isClient));
+      }
+    } catch {
+      setStorageWarning(true);
+    }
+    setLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!loaded || storageWarning) return;
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(clients));
+    } catch {
+      setStorageWarning(true);
+    }
+  }, [clients, loaded, storageWarning]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(""), 3200);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
+  const counts = useMemo(() => {
+    const scopedClients = selectedPanel === "all" ? clients : clients.filter((client) => client.panel === selectedPanel);
+    const result = { all: scopedClients.length, active: 0, expiring: 0, expired: 0 };
+    scopedClients.forEach((client) => { result[getClientStatus(client)] += 1; });
+    return result;
+  }, [clients, selectedPanel]);
+
+  const panelCounts = useMemo(() => {
+    const result = Object.fromEntries(PANELS.map((panel) => [panel, 0])) as Record<PanelName, number>;
+    clients.forEach((client) => { result[client.panel] += 1; });
+    return result;
+  }, [clients]);
+
+  const visibleClients = useMemo(() => {
+    const query = searchTerm.trim().toLocaleLowerCase("pt-BR");
+    return clients
+      .filter((client) => statusFilter === "all" || getClientStatus(client) === statusFilter)
+      .filter((client) => selectedPanel === "all" || client.panel === selectedPanel)
+      .filter((client) => !query || [client.name, client.phone, client.panel, client.panelNumber, client.username, client.plan].some((value) => value.toLocaleLowerCase("pt-BR").includes(query)))
+      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+  }, [clients, searchTerm, selectedPanel, statusFilter]);
+
+  const recentClients = useMemo(() => [...clients].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5), [clients]);
+
+  function openCreate() {
+    setEditingClient(null);
+    setFormOpen(true);
+  }
+
+  function openEdit(client: Client) {
+    setViewingClient(null);
+    setDeleteTarget(null);
+    setEditingClient(client);
+    setFormOpen(true);
+  }
+
+  function saveClient(fields: ClientFields, original: Client | null) {
+    if (original) {
+      setClients((current) => current.map((client) => client.id === original.id ? { ...client, ...fields } : client));
+      setToast("Cadastro atualizado.");
+    } else {
+      setClients((current) => [{ ...fields, id: makeId(), createdAt: new Date().toISOString() }, ...current]);
+      setToast("Cliente cadastrado.");
+    }
+    setFormOpen(false);
+    setEditingClient(null);
+  }
+
+  function deleteClient() {
+    if (!deleteTarget) return;
+    setClients((current) => current.filter((client) => client.id !== deleteTarget.id));
+    setToast("Cliente excluído.");
+    setDeleteTarget(null);
+    setViewingClient(null);
+  }
+
+  async function copyValue(label: string, value: string) {
+    if (!value) {
+      setToast(label + " não informado.");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(value);
+      setToast(label + " copiado.");
+    } catch {
+      setToast("Não foi possível copiar neste navegador.");
+    }
+  }
+
+  function goToClients(panel: PanelName | "all" = "all", filter: StatusFilter = "all") {
+    setSelectedPanel(panel);
+    setStatusFilter(filter);
+    setPage("clients");
+    setMobileNavOpen(false);
+  }
+
+  function navigate(nextPage: Page) {
+    setPage(nextPage);
+    setMobileNavOpen(false);
+    if (nextPage !== "clients") {
+      setSelectedPanel("all");
+      setStatusFilter("all");
+    }
+  }
+
+  const pageContent: Record<Page, { eyebrow: string; title: string; description: string }> = {
+    overview: { eyebrow: "SEU NEGÓCIO, EM ORDEM", title: "Visão geral", description: "Acompanhe seus clientes, planos e vencimentos em um só lugar." },
+    clients: {
+      eyebrow: "BASE DE CLIENTES",
+      title: selectedPanel === "all" ? "Clientes" : selectedPanel,
+      description: selectedPanel === "all" ? "Gerencie cadastros, dados de acesso e renovações." : "Clientes cadastrados no painel " + selectedPanel + ".",
+    },
+    panels: { eyebrow: "ORGANIZE SUA OPERAÇÃO", title: "Painéis", description: "Acesse rapidamente os clientes de cada painel." },
+  };
+
+  const heading = pageContent[page];
+  const navItems: { key: Page; label: string; icon: LucideIcon; count?: number }[] = [
+    { key: "overview", label: "Visão geral", icon: LayoutDashboard },
+    { key: "clients", label: "Clientes", icon: UsersRound, count: clients.length },
+    { key: "panels", label: "Painéis", icon: Server },
+  ];
+
   return (
-    <main className="sales-page" id="inicio">
-      <a className="skip-link" href="#conteudo">
-        Pular para o conteúdo
-      </a>
+    <div className="app-shell">
+      {mobileNavOpen && <button className="mobile-backdrop" aria-label="Fechar menu" onClick={() => setMobileNavOpen(false)} />}
+      <aside className={"sidebar" + (mobileNavOpen ? " sidebar-open" : "")}>
+        <div className="brand"><span className="brand-mark"><Tv size={21} strokeWidth={2.3} /></span><span className="brand-name">iptv<span>base</span></span></div>
+        <div className="workspace-switch"><span className="workspace-avatar">IP</span><span className="workspace-copy"><strong>Minha operação</strong><small>Área de trabalho</small></span><ChevronDown size={15} /></div>
+        <div className="nav-label">MENU PRINCIPAL</div>
+        <nav className="primary-nav" aria-label="Menu principal">
+          {navItems.map(({ key, label, icon: Icon, count }) => <button key={key} className={"nav-link" + (page === key ? " nav-link-active" : "")} onClick={() => navigate(key)}><Icon size={18} strokeWidth={1.9} /><span>{label}</span>{count !== undefined && <small>{count}</small>}</button>)}
+        </nav>
+        <div className="nav-label panels-label">PAINÉIS</div>
+        <nav className="panel-nav" aria-label="Painéis de clientes">
+          {PANELS.map((panel) => <button key={panel} className={"panel-nav-link" + (page === "clients" && selectedPanel === panel ? " panel-nav-active" : "")} onClick={() => goToClients(panel)}><span className="panel-nav-dot" /><span>{panel}</span><small>{panelCounts[panel]}</small></button>)}
+        </nav>
+        <div className="sidebar-bottom">
+          <div className="local-mode-card"><span className="local-mode-icon"><Database size={16} /></span><div><strong>{storageWarning ? "Armazenamento indisponível" : "Modo neste navegador"}</strong><small>{storageWarning ? "Não foi possível salvar os dados" : "Os dados ficam salvos aqui"}</small></div><span className={"storage-indicator" + (storageWarning ? " storage-error" : "")} /></div>
+          <div className="sidebar-user"><span className="user-avatar">AD</span><span className="user-copy"><strong>Administrador</strong><small>Gestão de clientes</small></span><ChevronDown size={15} /></div>
+        </div>
+      </aside>
 
-      <header className="site-header">
-        <a className="wordmark" href="#inicio" aria-label="Guia Não Puxa Mais">
-          <span className="brand-symbol">
-            <Footprints aria-hidden="true" size={21} />
-          </span>
-          <span>
-            Guia <strong>Não Puxa Mais</strong>
-          </span>
-        </a>
-        <p className="header-note">
-          <span aria-hidden="true" />
-          Um passo de cada vez, por 14 dias
-        </p>
-      </header>
+      <main className="main-column">
+        <header className="topbar">
+          <div className="topbar-left"><button className="mobile-menu-button icon-button" aria-label="Abrir menu" onClick={() => setMobileNavOpen(true)}><Menu size={20} /></button><div className="breadcrumb"><span>IPTV Base</span><ArrowRight size={13} /><strong>{heading.title}</strong></div></div>
+          <div className="topbar-right">
+            <label className="global-search"><Search size={17} /><input aria-label="Buscar clientes" placeholder="Buscar cliente, login ou plano..." value={searchTerm} onChange={(event) => { setSearchTerm(event.target.value); if (event.target.value) setPage("clients"); }} />{searchTerm && <button type="button" aria-label="Limpar busca" onClick={() => setSearchTerm("")}><X size={15} /></button>}</label>
+            <span className="topbar-date"><CalendarDays size={15} />{new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}</span>
+            <button className="button button-primary topbar-create" onClick={openCreate}><Plus size={16} /> Novo cliente</button>
+          </div>
+        </header>
 
-      <div id="conteudo">
-        <section className="hero-section" aria-labelledby="hero-title">
-          <div className="hero-copy">
-            <p className="eyebrow">
-              <span className="eyebrow-mark" aria-hidden="true">
-                <PawPrint size={15} />
-              </span>
-              UM PLANO PRÁTICO DE 14 DIAS
-            </p>
-            <h1 id="hero-title">
-              Passeios mais leves começam com a <em>guia frouxa.</em>
-            </h1>
-            <p className="hero-lede">
-              Tenha um passo a passo diário para ajudar seu cão a parar de puxar
-              — mesmo que você já tenha tentado peitoral, coleira ou trancos.
-            </p>
-            <p className="hero-support">
-              Copie a tarefa do dia e aplique já no próximo passeio, sem
-              adestrador e sem equipamento caro.
-            </p>
-            <div className="hero-tags" aria-label="Características do protocolo">
-              <span>
-                <Check aria-hidden="true" size={14} /> Sem trancos
-              </span>
-              <span>
-                <Check aria-hidden="true" size={14} /> Começa em casa
-              </span>
-              <span>
-                <Check aria-hidden="true" size={14} /> Um dia por vez
-              </span>
+        <div className="page-content">
+          <div className="page-heading"><div><span className="eyebrow">{heading.eyebrow}</span><h1>{heading.title}</h1><p>{heading.description}</p></div>{page !== "overview" && <button className="button button-primary page-create" onClick={openCreate}><Plus size={16} /> Cadastrar cliente</button>}</div>
+          {storageWarning
+            ? <div className="storage-alert"><AlertTriangle size={17} /><span>O navegador não permitiu salvar os dados. Seus cadastros podem ser perdidos ao fechar esta página.</span></div>
+            : <div className="local-data-notice"><ShieldCheck size={15} /><span>Os dados são salvos somente neste navegador e não sincronizam entre dispositivos.</span><span className="notice-dot" /><span>Senhas armazenadas localmente</span></div>}
+
+          {page === "overview" && <>
+            <section className="stats-grid" aria-label="Resumo dos clientes">
+              <button className="stat-card stat-total" onClick={() => goToClients("all", "all")}><span className="stat-icon"><UsersRound size={19} /></span><span className="stat-label">Total de clientes</span><strong>{counts.all}</strong><span className="stat-foot"><span>Base cadastrada</span><ArrowUpRight size={14} /></span></button>
+              <button className="stat-card stat-active" onClick={() => goToClients("all", "active")}><span className="stat-icon"><Check size={19} /></span><span className="stat-label">Clientes ativos</span><strong>{counts.active}</strong><span className="stat-foot"><span>Mais de 7 dias até vencer</span><ArrowUpRight size={14} /></span></button>
+              <button className="stat-card stat-expiring" onClick={() => goToClients("all", "expiring")}><span className="stat-icon"><Clock3 size={19} /></span><span className="stat-label">Vencem em breve</span><strong>{counts.expiring}</strong><span className="stat-foot"><span>Nos próximos 7 dias</span><ArrowDownRight size={14} /></span></button>
+              <button className="stat-card stat-expired" onClick={() => goToClients("all", "expired")}><span className="stat-icon"><CircleAlert size={19} /></span><span className="stat-label">Expirados</span><strong>{counts.expired}</strong><span className="stat-foot"><span>Precisam de renovação</span><ArrowDownRight size={14} /></span></button>
+            </section>
+            <div className="dashboard-grid">
+              <section className="content-card recent-card">
+                <div className="card-heading"><div><h2>Clientes recentes</h2><p>Os últimos cadastros adicionados à sua base.</p></div><button className="text-button" onClick={() => goToClients()}>Ver todos <ArrowRight size={15} /></button></div>
+                <ClientTable clients={recentClients} onView={setViewingClient} onEdit={openEdit} onDelete={setDeleteTarget} onCreate={openCreate} compact />
+              </section>
+              <section className="content-card panel-summary-card">
+                <div className="card-heading"><div><h2>Clientes por painel</h2><p>Distribuição dos seus cadastros.</p></div><span className="card-heading-icon"><Server size={17} /></span></div>
+                <div className="panel-summary-list">{PANELS.map((panel) => {
+                  const percent = clients.length ? Math.round((panelCounts[panel] / clients.length) * 100) : 0;
+                  return <button className="panel-summary-row" key={panel} onClick={() => goToClients(panel)}><span className="panel-summary-dot" /><span className="panel-summary-name">{panel}</span><span className="panel-summary-track"><span style={{ width: String(percent) + "%" }} /></span><strong>{panelCounts[panel]}</strong></button>;
+                })}</div>
+                <button className="panel-summary-footer" onClick={() => navigate("panels")}>Ver todos os painéis <ArrowRight size={15} /></button>
+              </section>
             </div>
-          </div>
+            <section className="help-strip"><span className="help-strip-icon"><MessageCircle size={18} /></span><div><strong>Comece organizando sua base</strong><p>Cadastre um cliente para acompanhar o acesso e não perder a data de renovação.</p></div><button className="button button-secondary button-small" onClick={openCreate}>Adicionar cliente <ArrowRight size={15} /></button></section>
+          </>}
 
-          <div
-            className="hero-art"
-            role="img"
-            aria-label="Prévia de uma tarefa diária do protocolo de 14 dias"
-          >
-            <div className="art-orbit art-orbit-one" />
-            <div className="art-orbit art-orbit-two" />
-            <div className="walk-card">
-              <div className="walk-card-top">
-                <div className="walk-card-title">
-                  <span className="walk-card-icon">
-                    <CalendarDays aria-hidden="true" size={19} />
-                  </span>
-                  <span>
-                    <small>SEU PLANO DE HOJE</small>
-                    <strong>Dia 01 de 14</strong>
-                  </span>
-                </div>
-                <span className="today-chip">COMECE</span>
-              </div>
-
-              <div className="walk-scene" aria-hidden="true">
-                <span className="scene-sun" />
-                <span className="scene-ground" />
-                <span className="scene-route" />
-                <span className="scene-person">
-                  <Footprints size={42} strokeWidth={1.55} />
-                </span>
-                <span className="scene-leash" />
-                <span className="scene-dog">
-                  <Dog size={55} strokeWidth={1.55} />
-                </span>
-                <span className="scene-paw paw-one">
-                  <PawPrint size={17} />
-                </span>
-                <span className="scene-paw paw-two">
-                  <PawPrint size={13} />
-                </span>
-              </div>
-
-              <div className="walk-task">
-                <div className="task-check">
-                  <Check aria-hidden="true" size={15} />
-                </div>
-                <div className="task-copy">
-                  <strong>Pratique a atenção antes de sair</strong>
-                  <span>Uma tarefa clara para começar com calma.</span>
-                </div>
-              </div>
-
-              <div className="walk-progress">
-                <div className="progress-label">
-                  <span>Seu progresso</span>
-                  <strong>1 de 14 dias</strong>
-                </div>
-                <div className="progress-track">
-                  <span />
-                </div>
-              </div>
+          {page === "clients" && <section className="content-card clients-card">
+            <div className="card-heading clients-card-heading"><div><h2>{selectedPanel === "all" ? "Todos os clientes" : "Painel " + selectedPanel}</h2><p>{visibleClients.length} {visibleClients.length === 1 ? "cadastro encontrado" : "cadastros encontrados"}</p></div><label className="filter-select"><span className="sr-only">Filtrar por painel</span><select value={selectedPanel} onChange={(event) => setSelectedPanel(event.target.value as PanelName | "all")}><option value="all">Todos os painéis</option>{PANELS.map((panel) => <option key={panel} value={panel}>{panel}</option>)}</select><ChevronDown size={15} /></label></div>
+            <div className="status-filters" role="group" aria-label="Filtrar por situação">
+              {([["all", "Todos", counts.all], ["active", "Ativos", counts.active], ["expiring", "Vencem em breve", counts.expiring], ["expired", "Expirados", counts.expired]] as const).map(([filter, label, count]) => <button key={filter} className={"filter-tab" + (statusFilter === filter ? " filter-tab-active" : "")} onClick={() => setStatusFilter(filter)}>{label}<span>{count}</span></button>)}
             </div>
-            <div className="art-sticker">
-              <Sparkles aria-hidden="true" size={17} />
-              <span>Menos disputa.<br />Mais parceria.</span>
-            </div>
-          </div>
-        </section>
+            <ClientTable clients={visibleClients} onView={setViewingClient} onEdit={openEdit} onDelete={setDeleteTarget} onCreate={openCreate} />
+          </section>}
 
-        <section
-          className="steps-section section-wrap"
-          aria-labelledby="steps-title"
-        >
-          <div className="section-heading">
-            <p className="eyebrow">UM CAMINHO EM TRÊS FASES</p>
-            <h2 id="steps-title">
-              Esses são os 3 passos para caminhar com a guia frouxa
-            </h2>
-            <p>
-              O protocolo organiza o treino na ordem certa: primeiro a atenção,
-              depois a caminhada e, por fim, as distrações da rua.
-            </p>
-          </div>
+          {page === "panels" && <>
+            <section className="panel-cards-grid">{PANELS.map((panel, index) => {
+              const colors = ["mint", "blue", "violet", "amber", "rose", "teal", "slate"];
+              return <button className="panel-card" key={panel} onClick={() => goToClients(panel)}><span className={"panel-card-icon tone-" + colors[index]}><Tv size={20} /></span><span className="panel-card-title">{panel}</span><strong>{panelCounts[panel]}</strong><span className="panel-card-caption">{panelCounts[panel] === 1 ? "cliente cadastrado" : "clientes cadastrados"}</span><span className="panel-card-arrow"><ArrowRight size={16} /></span></button>;
+            })}</section>
+            <section className="content-card panels-note"><span className="detail-icon"><Server size={17} /></span><div><strong>Sete painéis, uma única base</strong><p>Selecione um painel para consultar, editar ou cadastrar clientes vinculados a ele.</p></div><button className="button button-primary button-small" onClick={openCreate}><Plus size={15} /> Novo cliente</button></section>
+          </>}
+        </div>
+        <footer className="app-footer"><span>IPTV Base</span><span>Gestão simples para sua operação</span></footer>
+      </main>
 
-          <div className="steps-grid">
-            {steps.map((step) => {
-              const Icon = step.icon;
-              return (
-                <article className="step-card" key={step.number}>
-                  <div className="step-top">
-                    <span className={"step-icon " + step.tone}>
-                      <Icon aria-hidden="true" size={22} strokeWidth={1.8} />
-                    </span>
-                    <span className="step-number">{step.number}</span>
-                  </div>
-                  <p className="step-days">{step.days}</p>
-                  <h3>{step.title}</h3>
-                  <p className="step-description">{step.description}</p>
-                </article>
-              );
-            })}
-          </div>
-          <div className="steps-footnote">
-            <span className="steps-footnote-icon">
-              <Clock3 aria-hidden="true" size={17} />
-            </span>
-            <p>
-              Você sabe qual é a tarefa do dia — sem ficar pulando entre vídeos
-              soltos.
-            </p>
-          </div>
-        </section>
-
-        <section className="pain-section" aria-labelledby="pain-title">
-          <div className="pain-inner">
-            <div className="pain-copy">
-              <p className="eyebrow eyebrow-light">A GENTE ENTENDE</p>
-              <h2 id="pain-title">
-                O passeio devia ser um respiro, não mais uma disputa.
-              </h2>
-              <p>
-                Você sai de casa já esperando o puxão. Volta com o braço
-                dolorido, a paciência no fim e a sensação de que todo mundo na
-                rua está olhando.
-              </p>
-              <div className="pain-quote">
-                <span className="quote-mark">“</span>
-                <p>
-                  Trocar de coleira ou assistir a mais um vídeo solto pode
-                  deixar você sem saber qual passo seguir.
-                </p>
-              </div>
-            </div>
-            <div className="pain-list">
-              <p className="pain-list-title">Se isso parece familiar, você não está só:</p>
-              <div className="pain-item">
-                <span className="pain-item-icon">
-                  <Check aria-hidden="true" size={16} />
-                </span>
-                <p>Seu braço e seu ombro ficam doloridos depois do passeio.</p>
-              </div>
-              <div className="pain-item">
-                <span className="pain-item-icon">
-                  <Check aria-hidden="true" size={16} />
-                </span>
-                <p>Você fica tenso ao cruzar com cães, pessoas ou cheiros novos.</p>
-              </div>
-              <div className="pain-item">
-                <span className="pain-item-icon">
-                  <Check aria-hidden="true" size={16} />
-                </span>
-                <p>Você quer ajudar, mas não sabe qual exercício fazer primeiro.</p>
-              </div>
-              <div className="pain-note">
-                <PawPrint aria-hidden="true" size={19} />
-                <span>Um roteiro claro pode tornar o próximo passo mais simples.</span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section
-          className="deliverables-section section-wrap"
-          aria-labelledby="deliverables-title"
-        >
-          <div className="section-heading">
-            <p className="eyebrow">TUDO ORGANIZADO PARA VOCÊ</p>
-            <h2 id="deliverables-title">
-              O que você recebe no Guia Não Puxa Mais
-            </h2>
-            <p>
-              Materiais para entender o exercício, praticar e acompanhar o
-              progresso sem adivinhar o que vem depois.
-            </p>
-          </div>
-
-          <div className="deliverables-grid">
-            {deliverables.map((item) => {
-              const Icon = item.icon;
-              return (
-                <article className="deliverable-card" key={item.number}>
-                  <div className="deliverable-top">
-                    <span className="deliverable-icon">
-                      <Icon aria-hidden="true" size={21} strokeWidth={1.8} />
-                    </span>
-                    <span className="deliverable-label">{item.label}</span>
-                    <span className="deliverable-number">{item.number}</span>
-                  </div>
-                  <h3>{item.title}</h3>
-                  <p>{item.description}</p>
-                </article>
-              );
-            })}
-          </div>
-
-          <div className="deliverables-cta">
-            <div>
-              <p className="cta-kicker">ACESSO IMEDIATO AO CONTEÚDO</p>
-              <h3>Comece pelo próximo passeio.</h3>
-            </div>
-            <CheckoutAction label="Quero o protocolo, os vídeos e os 4 bônus" />
-          </div>
-          <p className="checkout-pending-note">
-            O botão será ativado quando o link de pagamento estiver configurado.
-          </p>
-        </section>
-
-        <section className="audience-section" aria-labelledby="audience-title">
-          <div className="audience-inner">
-            <div className="audience-copy">
-              <p className="eyebrow">PARA QUEM É</p>
-              <h2 id="audience-title">Para você que quer voltar a curtir o passeio.</h2>
-              <p>
-                Um roteiro prático para tutores de cães de qualquer porte que
-                puxam a guia ou ficam agitados na rua.
-              </p>
-            </div>
-            <div className="audience-list">
-              <div>
-                <span><Check aria-hidden="true" size={16} /></span>
-                <p>Para quem termina o passeio com dor no braço ou no ombro.</p>
-              </div>
-              <div>
-                <span><Check aria-hidden="true" size={16} /></span>
-                <p>Para quem passa vergonha quando o cão puxa, pula ou late.</p>
-              </div>
-              <div>
-                <span><Check aria-hidden="true" size={16} /></span>
-                <p>Para quem quer um plano pronto e fácil de seguir em casa e na rua.</p>
-              </div>
-              <div>
-                <span><Check aria-hidden="true" size={16} /></span>
-                <p>Para quem quer treinar sem trancos e sem equipamento caro.</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="offer-section" id="oferta" aria-labelledby="offer-title">
-          <div className="offer-inner">
-            <div className="offer-copy">
-              <p className="eyebrow eyebrow-light">SEU PLANO COMPLETO</p>
-              <h2 id="offer-title">
-                Um protocolo simples para sair do improviso.
-              </h2>
-              <p>
-                Você leva o passo a passo, as demonstrações em vídeo e os quatro
-                bônus para aplicar o treino com mais clareza.
-              </p>
-              <div className="offer-promise">
-                <span className="offer-promise-icon">
-                  <ShieldCheck aria-hidden="true" size={21} />
-                </span>
-                <p>
-                  <strong>Experimente por 7 dias.</strong>
-                  <span>
-                    Se o conteúdo não fizer sentido para você, peça o reembolso
-                    integral dentro do prazo.
-                  </span>
-                </p>
-              </div>
-              <div className="access-steps">
-                <p className="access-steps-title">Depois da compra:</p>
-                <div><span>01</span> Finalize o pedido e receba o acesso por e-mail.</div>
-                <div><span>02</span> Abra o protocolo e conheça a tarefa do dia.</div>
-                <div><span>03</span> Aplique no próximo passeio e marque seu avanço.</div>
-              </div>
-            </div>
-            <PriceCard />
-          </div>
-        </section>
-
-        <section className="guarantee-section section-wrap">
-          <div className="guarantee-icon">
-            <ShieldCheck aria-hidden="true" size={34} strokeWidth={1.5} />
-          </div>
-          <div className="guarantee-copy">
-            <p className="eyebrow">UM ACORDO SIMPLES</p>
-            <h2>7 dias de garantia incondicional</h2>
-            <p>
-              Você tem 7 dias para conhecer o conteúdo. Se concluir que ele não
-              faz sentido para você, solicite o reembolso de 100% do valor pago
-              dentro desse prazo.
-            </p>
-          </div>
-          <div className="guarantee-seal">
-            <span>7</span>
-            <small>DIAS</small>
-            <ShieldCheck aria-hidden="true" size={17} />
-          </div>
-        </section>
-
-        <section className="faq-section section-wrap" aria-labelledby="faq-title">
-          <div className="faq-heading">
-            <p className="eyebrow">DÚVIDAS FREQUENTES</p>
-            <h2 id="faq-title">Antes de começar</h2>
-            <p>O essencial para saber se o protocolo combina com vocês.</p>
-          </div>
-          <div className="faq-list">
-            <details className="faq-item">
-              <summary>
-                Qual a diferença para um curso de adestramento?
-                <ChevronDown aria-hidden="true" size={18} />
-              </summary>
-              <p>
-                Um curso pode abordar adestramento em geral. Este guia foca em
-                um problema específico: o cão que puxa a guia. É um material
-                curto e prático, com tarefas para aplicar no dia a dia.
-              </p>
-            </details>
-            <details className="faq-item">
-              <summary>
-                Meu cão é reativo ou agressivo. O protocolo serve?
-                <ChevronDown aria-hidden="true" size={18} />
-              </summary>
-              <p>
-                O protocolo é voltado a puxões e agitação na rua. Casos de
-                agressividade, medo intenso ou risco de mordida precisam de
-                acompanhamento individual de um adestrador qualificado ou de
-                um veterinário comportamental.
-              </p>
-            </details>
-            <details className="faq-item">
-              <summary>
-                Preciso usar trancos ou comprar equipamento caro?
-                <ChevronDown aria-hidden="true" size={18} />
-              </summary>
-              <p>
-                A proposta do guia é seguir um passo a passo sem trancos e sem
-                depender de equipamento caro. Você pode começar com o que já
-                tem, priorizando segurança e conforto para você e para o cão.
-              </p>
-            </details>
-            <details className="faq-item">
-              <summary>
-                Como funciona a garantia de 7 dias?
-                <ChevronDown aria-hidden="true" size={18} />
-              </summary>
-              <p>
-                Se o conteúdo não fizer sentido para você, solicite o
-                reembolso integral dentro dos primeiros 7 dias da compra.
-              </p>
-            </details>
-          </div>
-        </section>
-
-        <section className="closing-section" aria-labelledby="closing-title">
-          <div className="closing-inner">
-            <div className="closing-copy">
-              <span className="closing-paw" aria-hidden="true">
-                <PawPrint size={22} />
-              </span>
-              <p className="eyebrow">O PRÓXIMO PASSEIO PODE SER DIFERENTE</p>
-              <h2 id="closing-title">
-                Troque a tentativa e erro por um passo a passo.
-              </h2>
-              <p>
-                Você pode continuar improvisando a cada puxão ou começar com
-                uma tarefa clara para hoje.
-              </p>
-            </div>
-            <PriceCard />
-          </div>
-        </section>
-      </div>
-
-      <footer className="site-footer">
-        <a className="wordmark footer-wordmark" href="#inicio">
-          <span className="brand-symbol">
-            <Footprints aria-hidden="true" size={19} />
-          </span>
-          <span>
-            Guia <strong>Não Puxa Mais</strong>
-          </span>
-        </a>
-        <p>
-          Passeios mais leves começam com atenção, prática e um passo de cada vez.
-        </p>
-        <a className="back-to-top" href="#inicio">
-          Voltar ao início <ArrowRight aria-hidden="true" size={15} />
-        </a>
-      </footer>
-    </main>
+      {formOpen && <ClientFormModal key={editingClient?.id ?? "new"} client={editingClient} onClose={() => { setFormOpen(false); setEditingClient(null); }} onSave={saveClient} />}
+      {viewingClient && <ClientDetailModal client={viewingClient} onClose={() => setViewingClient(null)} onEdit={openEdit} onDelete={setDeleteTarget} onCopy={copyValue} />}
+      {deleteTarget && <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setDeleteTarget(null)}><section className="modal-card delete-modal" role="alertdialog" aria-modal="true" aria-labelledby="delete-title"><span className="delete-icon"><Trash2 size={21} /></span><h2 id="delete-title">Excluir cadastro?</h2><p>O cadastro de <strong>{deleteTarget.name}</strong> será removido deste navegador. Esta ação não pode ser desfeita.</p><div className="form-buttons delete-buttons"><button className="button button-secondary" onClick={() => setDeleteTarget(null)}>Cancelar</button><button className="button button-danger" onClick={deleteClient}><Trash2 size={16} />Excluir cliente</button></div></section></div>}
+      {toast && <div className="toast-message" role="status"><Check size={16} />{toast}</div>}
+    </div>
   );
 }

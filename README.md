@@ -1,24 +1,22 @@
-# PlanilhaIPTV
+# IPTV Base
 
-Projeto 10/10/2026
+Aplicação para organizar clientes de IPTV, credenciais, painéis, planos e datas de expiração.
 
-This project was built with [Lovable](https://lovable.dev).
+## Recursos
 
-## Build with Lovable
+- Cadastro, consulta, edição e exclusão de clientes
+- Painéis Atmos, Cinemax, Luma TV, Nexus, Espace One Play, Slim Plus e Aura TV+
+- Busca por cliente, telefone, login, plano ou painel
+- Resumo de contas ativas, próximas do vencimento e expiradas
+- Dados salvos no armazenamento local do navegador
 
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/49c028ad-b4b5-44ad-a16c-dcf051e1eee4).
+Os cadastros ficam somente no navegador e não são sincronizados entre dispositivos. As senhas também são armazenadas localmente.
 
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
+## Desenvolvimento
 
-## Development
+Este projeto está conectado ao [Lovable](https://lovable.dev). Alterações enviadas para a branch main aparecem no editor.
 
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
-
-```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
+~~~sh
+npm install
 npm run dev
-```
+~~~
