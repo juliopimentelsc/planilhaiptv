@@ -27,10 +27,6 @@
   --muted-foreground: oklch(0.57 0.025 255);
   --border: oklch(0.91 0.016 250);
   --input: oklch(0.91 0.016 250);
-  --primary-soft: oklch(0.95 0.035 174);
-  --danger-soft: oklch(0.96 0.025 25);
-  --warning-soft: oklch(0.97 0.035 82);
-  --success-soft: oklch(0.95 0.035 155);
   --navy: oklch(0.225 0.035 255);
   --navy-soft: oklch(0.28 0.04 255);
   --surface: oklch(1 0 0);
@@ -71,38 +67,8 @@ body {
   margin: 0;
   color: var(--ink);
   background: var(--background);
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 14px;
-  font-weight: 400;
-  line-height: 1.55;
-  letter-spacing: -0.011em;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
-}
-
-h1, h2, h3, h4, h5, h6 {
-  margin: 0;
-  font-weight: 700;
-  letter-spacing: -0.022em;
-  line-height: 1.25;
-  color: var(--ink);
-}
-
-h1 { font-size: clamp(1.5rem, 2.2vw, 1.95rem); font-weight: 740; letter-spacing: -0.03em; }
-h2 { font-size: 1.05rem; font-weight: 700; }
-h3 { font-size: 0.92rem; font-weight: 680; }
-
-::selection {
-  background: oklch(0.68 0.13 176 / 0.22);
-  color: var(--ink);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
-  }
+  line-height: 1.5;
 }
 
 button,
@@ -608,19 +574,9 @@ textarea:focus-visible {
   border-radius: 9px;
   cursor: pointer;
   font-size: 11px;
-  font-weight: 600;
-  letter-spacing: -0.005em;
+  font-weight: 650;
   white-space: nowrap;
-  transition: color 180ms cubic-bezier(0.4, 0, 0.2, 1),
-              background 180ms cubic-bezier(0.4, 0, 0.2, 1),
-              border 180ms cubic-bezier(0.4, 0, 0.2, 1),
-              transform 120ms cubic-bezier(0.4, 0, 0.2, 1),
-              box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.button:focus-visible {
-  outline: 2px solid oklch(0.68 0.13 176 / 0.5);
-  outline-offset: 2px;
+  transition: color 150ms ease, background 150ms ease, border 150ms ease, transform 150ms ease, box-shadow 150ms ease;
 }
 
 .button:active {
@@ -2522,23 +2478,307 @@ textarea:focus-visible {
   }
 }
 
-/* NEXUS-PRO:WATERMARK-HIDE:START */
-/* Overlay do badge oficial ocultado por conflito com UI custom.
-   Bloco idempotente gerenciado pela extensão Nexus Pro.
-   NÃO EDITAR manualmente — para reverter, remova o bloco inteiro. */
-#lovable-badge,
-#lovable-badge-v2,
-[id^="lovable-badge"],
-[data-testid="lovable-badge"],
-a[href*="lovable.dev/?via="],
-a[href*="lovable.dev?via="],
-a[href*="gpteng.co"],
-iframe[src*="lovable.dev/badge"] {
-  display: none !important;
-  visibility: hidden !important;
-  opacity: 0 !important;
-  pointer-events: none !important;
-  width: 0 !important;
-  height: 0 !important;
+/* Shared interaction polish for cards and controls. */
+:root {
+  --motion-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
 }
-/* NEXUS-PRO:WATERMARK-HIDE:END */
+
+:where(.button, .icon-button, .field-action, .text-button, .panel-summary-footer, .panel-summary-row, .filter-tab, .sidebar-add-panel, .nav-link, .panel-nav-link, .global-search button) {
+  transition-timing-function: var(--motion-ease);
+}
+
+button:focus-visible {
+  outline: 2px solid oklch(0.56 0.13 176 / 0.72);
+  outline-offset: 3px;
+}
+
+.button {
+  transition: color 180ms var(--motion-ease), background-color 180ms var(--motion-ease), border-color 180ms var(--motion-ease), transform 180ms var(--motion-ease), box-shadow 180ms var(--motion-ease);
+  font-size: 12px;
+}
+
+.button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.button:active:not(:disabled) {
+  transform: translateY(0) scale(0.985);
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+  box-shadow: none;
+}
+
+.icon-button,
+.field-action,
+.global-search button,
+.sidebar-add-panel {
+  transition: color 170ms var(--motion-ease), background-color 170ms var(--motion-ease), border-color 170ms var(--motion-ease), transform 170ms var(--motion-ease), box-shadow 170ms var(--motion-ease);
+}
+
+.icon-button:hover,
+.field-action:hover,
+.sidebar-add-panel:hover {
+  transform: translateY(-1px);
+}
+
+.icon-button:active,
+.field-action:active,
+.sidebar-add-panel:active {
+  transform: scale(0.96);
+}
+
+.content-card,
+.stat-card,
+.panel-card {
+  transition: transform 220ms var(--motion-ease), border-color 220ms var(--motion-ease), box-shadow 220ms var(--motion-ease), background-color 220ms var(--motion-ease);
+}
+
+.content-card {
+  box-shadow: 0 4px 14px oklch(0.25 0.03 255 / 0.035);
+}
+
+.content-card:hover {
+  border-color: oklch(0.88 0.022 250);
+  box-shadow: 0 8px 22px oklch(0.25 0.03 255 / 0.055);
+}
+
+.card-heading h2 {
+  font-size: 14px;
+}
+
+.card-heading p {
+  font-size: 11px;
+}
+
+.text-button,
+.panel-summary-footer {
+  font-size: 11px;
+}
+
+.stat-label {
+  font-size: 11px;
+}
+
+.stat-foot {
+  font-size: 10px;
+}
+
+.customer-copy strong {
+  font-size: 11px;
+}
+
+.customer-copy span,
+.sub-cell {
+  font-size: 10px;
+}
+
+.client-table th {
+  font-size: 10px;
+}
+
+.client-table td {
+  font-size: 11px;
+}
+
+.status-badge {
+  font-size: 9px;
+}
+
+.filter-tab {
+  font-size: 10px;
+}
+
+.panel-card-title {
+  font-size: 12px;
+}
+
+.panel-card-caption {
+  font-size: 10px;
+}
+
+.help-strip strong {
+  font-size: 11px;
+}
+
+.help-strip p {
+  font-size: 10px;
+}
+
+.button-small {
+  font-size: 11px;
+}
+
+.stat-card,
+.panel-card {
+  box-shadow: 0 4px 14px oklch(0.25 0.03 255 / 0.035);
+}
+
+.stat-card:hover,
+.panel-card:hover {
+  transform: translateY(-3px);
+  border-color: oklch(0.79 0.065 176);
+  box-shadow: 0 14px 28px oklch(0.25 0.03 255 / 0.09);
+}
+
+.stat-card:active,
+.panel-card:active {
+  transform: translateY(-1px) scale(0.995);
+}
+
+.panel-card-add:hover {
+  background: oklch(0.975 0.025 176);
+}
+
+.stat-icon,
+.panel-card-icon,
+.card-heading-icon,
+.help-strip-icon,
+.customer-avatar {
+  transition: transform 220ms var(--motion-ease), box-shadow 220ms var(--motion-ease);
+}
+
+.stat-card:hover .stat-icon,
+.panel-card:hover .panel-card-icon,
+.client-table tbody tr:hover .customer-avatar {
+  transform: scale(1.06);
+  box-shadow: 0 5px 12px oklch(0.3 0.06 176 / 0.1);
+}
+
+.help-strip {
+  transition: border-color 200ms var(--motion-ease), background-color 200ms var(--motion-ease), box-shadow 200ms var(--motion-ease);
+}
+
+.help-strip:hover {
+  border-color: oklch(0.87 0.055 176);
+  box-shadow: 0 6px 18px oklch(0.3 0.06 176 / 0.06);
+}
+
+.panel-summary-row {
+  transition: background-color 160ms var(--motion-ease), transform 160ms var(--motion-ease);
+}
+
+.panel-summary-row:hover,
+.panel-summary-row:focus-visible {
+  background: oklch(0.97 0.022 176);
+  transform: translateX(2px);
+}
+
+.panel-summary-track span {
+  transition: width 420ms var(--motion-ease);
+}
+
+.filter-tab {
+  transition: color 170ms var(--motion-ease), background-color 170ms var(--motion-ease), transform 170ms var(--motion-ease);
+}
+
+.filter-tab:hover {
+  transform: translateY(-1px);
+}
+
+.filter-tab-active {
+  box-shadow: inset 0 0 0 1px oklch(0.86 0.05 176 / 0.6);
+}
+
+.client-table tbody tr {
+  transition: background-color 170ms var(--motion-ease);
+}
+
+.client-table tbody tr:hover {
+  background: oklch(0.977 0.016 176);
+}
+
+.status-badge {
+  transition: background-color 180ms var(--motion-ease), color 180ms var(--motion-ease);
+}
+
+.modal-backdrop {
+  animation-duration: 210ms;
+  animation-timing-function: var(--motion-ease);
+}
+
+.modal-card {
+  animation-duration: 260ms;
+  animation-timing-function: var(--motion-ease);
+}
+
+@keyframes surface-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .stats-grid > .stat-card,
+  .dashboard-grid > *,
+  .help-strip,
+  .panel-cards-grid > .panel-card,
+  .panels-note,
+  .clients-card {
+    animation: surface-enter 420ms var(--motion-ease) both;
+  }
+
+  .stats-grid > .stat-card:nth-child(2),
+  .dashboard-grid > *:nth-child(2),
+  .panel-cards-grid > .panel-card:nth-child(4) {
+    animation-delay: 55ms;
+  }
+
+  .stats-grid > .stat-card:nth-child(3),
+  .panel-cards-grid > .panel-card:nth-child(5) {
+    animation-delay: 100ms;
+  }
+
+  .stats-grid > .stat-card:nth-child(4),
+  .panel-cards-grid > .panel-card:nth-child(6) {
+    animation-delay: 145ms;
+  }
+
+  .panel-cards-grid > .panel-card:nth-child(2) {
+    animation-delay: 35ms;
+  }
+
+  .panel-cards-grid > .panel-card:nth-child(3) {
+    animation-delay: 70ms;
+  }
+
+  .panel-cards-grid > .panel-card:nth-child(7) {
+    animation-delay: 180ms;
+  }
+
+  .panel-cards-grid > .panel-card:nth-child(n + 8) {
+    animation-delay: 210ms;
+  }
+
+  .client-table tbody tr:nth-child(-n + 6) {
+    animation: surface-enter 320ms var(--motion-ease) both;
+  }
+
+  .client-table tbody tr:nth-child(2) { animation-delay: 25ms; }
+  .client-table tbody tr:nth-child(3) { animation-delay: 50ms; }
+  .client-table tbody tr:nth-child(4) { animation-delay: 75ms; }
+  .client-table tbody tr:nth-child(5) { animation-delay: 100ms; }
+  .client-table tbody tr:nth-child(6) { animation-delay: 125ms; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
