@@ -29,6 +29,7 @@ type Client = {
   purchaseDate: string;
   expirationDate: string;
   plan: string;
+  app?: string;
   notes: string;
   createdAt: string;
 };
@@ -42,7 +43,7 @@ function todayIso() {
 
 const EMPTY_FORM: ClientFields = {
   name: "", phone: "", panel: "Atmos", panelNumber: "", username: "", password: "",
-  purchaseDate: todayIso(), expirationDate: "", plan: "", notes: "",
+  purchaseDate: todayIso(), expirationDate: "", plan: "", app: "", notes: "",
 };
 
 function normalizePanelNames(value: unknown): PanelName[] {
@@ -110,6 +111,7 @@ function isClient(value: unknown): value is Client {
     typeof client["purchaseDate"] === "string" &&
     typeof client["expirationDate"] === "string" &&
     typeof client["plan"] === "string" &&
+    (typeof client["app"] === "undefined" || typeof client["app"] === "string") &&
     typeof client["notes"] === "string" &&
     typeof client["createdAt"] === "string";
 }
@@ -182,7 +184,7 @@ function ClientFormModal({ client, panels, onClose, onSave }: ClientFormModalPro
   const [form, setForm] = useState<ClientFields>(() => client ? {
     name: client.name, phone: client.phone, panel: client.panel, panelNumber: client.panelNumber,
     username: client.username, password: client.password, purchaseDate: client.purchaseDate,
-    expirationDate: client.expirationDate, plan: client.plan, notes: client.notes,
+    expirationDate: client.expirationDate, plan: client.plan, app: client.app ?? "", notes: client.notes,
   } : { ...EMPTY_FORM, purchaseDate: todayIso() });
   const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState("");
@@ -227,6 +229,7 @@ function ClientFormModal({ client, panels, onClose, onSave }: ClientFormModalPro
               <label className="field"><span>Plano comprado <b>*</b></span><input required maxLength={60} value={form.plan} onChange={(event) => update("plan", event.target.value)} placeholder="Ex.: 30 dias, 3 meses, anual" /></label>
               <label className="field"><span>Data da compra <b>*</b></span><input required type="date" value={form.purchaseDate} onChange={(event) => update("purchaseDate", event.target.value)} /></label>
               <label className="field"><span>Data de expiração <b>*</b></span><input required type="date" min={form.purchaseDate} value={form.expirationDate} onChange={(event) => update("expirationDate", event.target.value)} /></label>
+              <label className="field"><span>Aplicativo utilizado pelo cliente</span><input maxLength={80} value={form.app ?? ""} onChange={(event) => update("app", event.target.value)} placeholder="Ex.: Smart IPTV, XCIPTV" /></label>
               <label className="field field-span-2"><span>Observações</span><textarea rows={2} maxLength={300} value={form.notes} onChange={(event) => update("notes", event.target.value)} placeholder="Anotações internas sobre este cliente (opcional)" /></label>
             </div>
             {formError && <p className="form-error"><AlertTriangle size={15} />{formError}</p>}
@@ -307,6 +310,7 @@ function ClientDetailModal({ client, onClose, onEdit, onDelete, onCopy }: Client
               <div className="detail-item"><span>Painel</span><strong>{client.panel}</strong></div>
               <div className="detail-item"><span>Nº do painel</span><strong>{client.panelNumber || "—"}</strong></div>
               <div className="detail-item"><span>Plano comprado</span><strong>{client.plan || "—"}</strong></div>
+              <div className="detail-item"><span>Aplicativo</span><strong>{client.app || "—"}</strong></div>
               <div className="detail-item"><span>Compra</span><strong>{formatDate(client.purchaseDate)}</strong></div>
               <div className="detail-item"><span>Expiração</span><strong>{formatDate(client.expirationDate)}</strong></div>
               <div className="detail-item"><span>Situação</span><strong className={"detail-status-text text-" + status}>{expirationLabel(client.expirationDate)}</strong></div>
