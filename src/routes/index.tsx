@@ -5,7 +5,7 @@ import {
   Menu, MessageCircle, Pencil, Plus, Search, Server, ShieldCheck, Trash2, Tv,
   UsersRound, X, type LucideIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 export const Route = createFileRoute("/")({ component: Index });
 
@@ -54,11 +54,23 @@ function toDateTimeLocal(value: string, endOfDay = false) {
   return value + (endOfDay ? "T23:59:59" : "T00:00:00");
 }
 
+function toComparableDate(value: string): number {
+  if (!value) return Number.NEGATIVE_INFINITY;
+  const date = new Date(value.length === 10 ? value + "T00:00:00" : value);
+  const time = date.getTime();
+  return Number.isNaN(time) ? Number.NEGATIVE_INFINITY : time;
+}
+
 const EMPTY_FORM: ClientFields = {
   name: "", phone: "", panel: "Atmos", panelNumber: "", username: "", password: "",
   purchaseDate: todayIso(), expirationDate: "", plan: "", app: "", customerStatus: "active",
   renewalLink: "", price: "", accountCreatedAt: "", connections: "", notes: "",
 };
+
+function normalizeText(value: string, max = 300): string {
+  if (typeof value !== "string") return "";
+  return value.replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, max);
+}
 
 function normalizePanelNames(value: unknown): PanelName[] {
   const unique = new Map<string, string>();
@@ -119,7 +131,9 @@ function expirationLabel(value: string) {
 }
 
 function initials(name: string) {
-  return name.trim().split(/\s+/).slice(0, 2).map((part) => part.charAt(0).toUpperCase()).join("") || "CL";
+  const cleaned = (name ?? "").trim();
+  if (!cleaned) return "CL";
+  return cleaned.split(/\s+/).slice(0, 2).map((part) => part.charAt(0).toUpperCase()).join("") || "CL";
 }
 
 function isClient(value: unknown): value is Client {
@@ -184,7 +198,7 @@ function ClientTable({ clients, onView, onEdit, onDelete, onCreate, compact = fa
           {clients.map((client) => {
             return (
               <tr key={client.id} onClick={() => onView(client)}>
-                <td><div className="customer-cell"><div className="customer-avatar">{initials(client.name)}</div><div className="customer-copy"><strong>{client.name}</strong><span>{client.phone || client.username}</span></div></div></td>
+                <td><div className="customer-cell"><div className="customer-avatar">{initials(client.name)}</div><div className="customer-copy"><strong>{client.name || "Sem nome"}</strong><span>{client.phone || client.username}</span></div></div></td>
                 <td><span className="panel-cell"><span className="panel-dot"><Tv size={13} /></span>{client.panel}</span>{client.panelNumber && <span className="sub-cell">Painel {client.panelNumber}</span>}</td>
                 <td><span className="plan-cell">{client.plan || "—"}</span></td>
                 <td><strong className="date-cell">{formatDate(client.expirationDate)}</strong><span className="sub-cell">{expirationLabel(client.expirationDate)}</span></td>
@@ -227,7 +241,7 @@ function ClientFormModal({ client, panels, onClose, onSave }: ClientFormModalPro
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (toDateTimeLocal(form.expirationDate, true) < toDateTimeLocal(form.purchaseDate)) {
+    if (toComparableDate(form.expirationDate) < toComparableDate(form.purchaseDate)) {
       setFormError("A data de vencimento precisa ser igual ou posterior à compra.");
       return;
     }
@@ -340,7 +354,7 @@ function ClientDetailModal({ client, onClose, onEdit, onDelete, onCopy }: Client
   return (
     <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <section className="modal-card detail-modal" role="dialog" aria-modal="true" aria-labelledby="detail-title">
-        <div className="detail-cover"><button className="icon-button detail-close" aria-label="Fechar" onClick={onClose}><X size={19} /></button><div className="detail-avatar">{initials(client.name)}</div><span className="eyebrow">FICHA DO CLIENTE</span><h2 id="detail-title">{client.name}</h2><p>{client.phone || "Telefone não informado"}</p><CustomerStatusBadge status={client.customerStatus ?? "active"} /></div>
+        <div className="detail-cover"><button className="icon-button detail-close" aria-label="Fechar" onClick={onClose}><X size={19} /></button><div className="detail-avatar">{initials(client.name)}</div><span className="eyebrow">FICHA DO CLIENTE</span><h2 id="detail-title">{client.name || "Sem nome"}</h2><p>{client.phone || "Telefone não informado"}</p><CustomerStatusBadge status={client.customerStatus ?? "active"} /></div>
         <div className="detail-body">
           <div className="detail-section">
             <div className="detail-section-heading"><span className="detail-icon"><Tv size={17} /></span><div><strong>Painel e plano</strong><small>Informações do cadastro</small></div></div>
@@ -388,6 +402,8 @@ function Index() {
   const [deleteTarget, setDeleteTarget] = useState<Client | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [toast, setToast] = useState("");
+  const [pageBeforeSearch, setPageBeforeSearch] = useState<Page>("overview");
+  const toastTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     try {
@@ -413,16 +429,42 @@ function Index() {
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(clients));
       window.localStorage.setItem(PANELS_STORAGE_KEY, JSON.stringify(panels));
-    } catch {
+    } catch (error) {
+      console.warn("[storage] falha ao salvar dados:", error);
       setStorageWarning(true);
+      setToast("Não foi possível salvar os dados neste navegador.");
     }
   }, [clients, panels, loaded, storageWarning]);
 
   useEffect(() => {
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
+    }
     if (!toast) return;
-    const timer = window.setTimeout(() => setToast(""), 3200);
-    return () => window.clearTimeout(timer);
+    toastTimerRef.current = window.setTimeout(() => setToast(""), 3200);
+    return () => {
+      if (toastTimerRef.current) {
+        window.clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = null;
+      }
+    };
   }, [toast]);
+
+  useEffect(() => {
+    function onError(event: ErrorEvent) {
+      console.error("[window.error]", event.error ?? event.message);
+    }
+    function onUnhandledRejection(event: PromiseRejectionEvent) {
+      console.error("[unhandledrejection]", event.reason);
+    }
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onUnhandledRejection);
+    return () => {
+      window.removeEventListener("error", onError);
+      window.removeEventListener("unhandledrejection", onUnhandledRejection);
+    };
+  }, []);
 
   const counts = useMemo(() => {
     const panelClients = selectedPanel === "all" ? clients : clients.filter((client) => client.panel === selectedPanel);
@@ -476,11 +518,29 @@ function Index() {
   }
 
   function saveClient(fields: ClientFields, original: Client | null) {
+    const sanitized: ClientFields = {
+      name: normalizeText(fields.name, 90),
+      phone: normalizeText(fields.phone, 30),
+      panel: fields.panel,
+      panelNumber: normalizeText(fields.panelNumber, 40),
+      username: normalizeText(fields.username, 100),
+      password: fields.password,
+      purchaseDate: fields.purchaseDate,
+      expirationDate: fields.expirationDate,
+      plan: normalizeText(fields.plan, 60),
+      app: normalizeText(fields.app ?? "", 80),
+      customerStatus: fields.customerStatus ?? "active",
+      renewalLink: normalizeText(fields.renewalLink ?? "", 300),
+      price: normalizeText(fields.price ?? "", 40),
+      accountCreatedAt: fields.accountCreatedAt ?? "",
+      connections: normalizeText(fields.connections ?? "", 10),
+      notes: normalizeText(fields.notes, 300),
+    };
     if (original) {
-      setClients((current) => current.map((client) => client.id === original.id ? { ...client, ...fields } : client));
+      setClients((current) => current.map((client) => client.id === original.id ? { ...client, ...sanitized } : client));
       setToast("Cadastro atualizado.");
     } else {
-      setClients((current) => [{ ...fields, id: makeId(), createdAt: new Date().toISOString() }, ...current]);
+      setClients((current) => [{ ...sanitized, id: makeId(), createdAt: new Date().toISOString() }, ...current]);
       setToast("Cliente cadastrado.");
     }
     setFormOpen(false);
@@ -526,6 +586,16 @@ function Index() {
     }
   }
 
+  function handleSearchChange(value: string) {
+    setSearchTerm(value);
+    if (value) {
+      setPageBeforeSearch(page === "clients" ? page : page);
+      if (page !== "clients") setPage("clients");
+    } else {
+      if (page === "clients") setPage(pageBeforeSearch === "clients" ? "overview" : pageBeforeSearch);
+    }
+  }
+
   const pageContent: Record<Page, { eyebrow: string; title: string; description: string }> = {
     overview: { eyebrow: "SEU NEGÓCIO, EM ORDEM", title: "Visão geral", description: "Acompanhe seus clientes, planos e vencimentos em um só lugar." },
     clients: {
@@ -542,6 +612,21 @@ function Index() {
     { key: "clients", label: "Clientes", icon: UsersRound, count: clients.length },
     { key: "panels", label: "Painéis", icon: Server },
   ];
+
+  if (!loaded) {
+    return (
+      <div className="app-shell">
+        <main className="main-column">
+          <div className="page-content">
+            <div className="bootstrap-loader" role="status" aria-label="Carregando">
+              <div className="bootstrap-loader-mark"><Tv size={22} strokeWidth={2.3} /></div>
+              <div className="bootstrap-loader-text"><strong>IPTV Base</strong><small>Carregando sua base…</small></div>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="app-shell">
@@ -567,7 +652,7 @@ function Index() {
         <header className="topbar">
           <div className="topbar-left"><button className="mobile-menu-button icon-button" aria-label="Abrir menu" onClick={() => setMobileNavOpen(true)}><Menu size={20} /></button><div className="breadcrumb"><span>IPTV Base</span><ArrowRight size={13} /><strong>{heading.title}</strong></div></div>
           <div className="topbar-right">
-            <label className="global-search"><Search size={17} /><input aria-label="Buscar clientes" placeholder="Buscar cliente, login ou plano..." value={searchTerm} onChange={(event) => { setSearchTerm(event.target.value); if (event.target.value) setPage("clients"); }} />{searchTerm && <button type="button" aria-label="Limpar busca" onClick={() => setSearchTerm("")}><X size={15} /></button>}</label>
+            <label className="global-search"><Search size={17} /><input aria-label="Buscar clientes" placeholder="Buscar cliente, login ou plano..." value={searchTerm} onChange={(event) => handleSearchChange(event.target.value)} />{searchTerm && <button type="button" aria-label="Limpar busca" onClick={() => handleSearchChange("")}><X size={15} /></button>}</label>
             <span className="topbar-date"><CalendarDays size={15} />{new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}</span>
             <button className="button button-primary topbar-create" onClick={openCreate}><Plus size={16} /> Novo cliente</button>
           </div>
@@ -626,7 +711,7 @@ function Index() {
       {formOpen && <ClientFormModal key={editingClient?.id ?? "new"} client={editingClient} panels={panels} onClose={() => { setFormOpen(false); setEditingClient(null); }} onSave={saveClient} />}
       {panelFormOpen && <PanelFormModal onClose={() => setPanelFormOpen(false)} onSave={addPanel} />}
       {viewingClient && <ClientDetailModal client={viewingClient} onClose={() => setViewingClient(null)} onEdit={openEdit} onDelete={setDeleteTarget} onCopy={copyValue} />}
-      {deleteTarget && <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setDeleteTarget(null)}><section className="modal-card delete-modal" role="alertdialog" aria-modal="true" aria-labelledby="delete-title"><span className="delete-icon"><Trash2 size={21} /></span><h2 id="delete-title">Excluir cadastro?</h2><p>O cadastro de <strong>{deleteTarget.name}</strong> será removido deste navegador. Esta ação não pode ser desfeita.</p><div className="form-buttons delete-buttons"><button className="button button-secondary" onClick={() => setDeleteTarget(null)}>Cancelar</button><button className="button button-danger" onClick={deleteClient}><Trash2 size={16} />Excluir cliente</button></div></section></div>}
+      {deleteTarget && <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setDeleteTarget(null)}><section className="modal-card delete-modal" role="alertdialog" aria-modal="true" aria-labelledby="delete-title"><span className="delete-icon"><Trash2 size={21} /></span><h2 id="delete-title">Excluir cadastro?</h2><p>O cadastro de <strong>{deleteTarget.name || "este cliente"}</strong> será removido deste navegador. Esta ação não pode ser desfeita.</p><div className="form-buttons delete-buttons"><button className="button button-secondary" onClick={() => setDeleteTarget(null)}>Cancelar</button><button className="button button-danger" onClick={deleteClient}><Trash2 size={16} />Excluir cliente</button></div></section></div>}
       {toast && <div className="toast-message" role="status"><Check size={16} />{toast}</div>}
     </div>
   );
