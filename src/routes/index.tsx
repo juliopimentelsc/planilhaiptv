@@ -8,6 +8,7 @@ import {
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { AuthScreen } from "@/components/auth-screen";
 import {
+  CLIENTS_STORAGE_KEY,
   DEFAULT_PANELS,
   createClient as createCloudClient,
   createPanel as createCloudPanel,
@@ -24,6 +25,7 @@ import {
   type ClientFields,
   type CustomerAccountStatus,
   type PanelName,
+  PANELS_STORAGE_KEY,
 } from "@/lib/cloud-data";
 
 export const Route = createFileRoute("/")({ component: Index });
@@ -413,7 +415,11 @@ function Index() {
       const hasLegacyContent = legacy.clients.length > 0 || legacy.panels.some((panel) =>
         !DEFAULT_PANELS.some((defaultPanel) => defaultPanel.toLocaleLowerCase("pt-BR") === panel.toLocaleLowerCase("pt-BR")));
       const dismissedKey = "iptv-client-manager.import-dismissed." + session.user.id;
-      if (cloudData.clients.length === 0 && hasLegacyContent && !window.localStorage.getItem(dismissedKey)) {
+      const ownerKey = "iptv-client-manager.legacy-data-owner.v1";
+      const localOwner = window.localStorage.getItem(ownerKey);
+      const mayOfferImport = !localOwner || localOwner === session.user.id;
+      if (cloudData.clients.length === 0 && hasLegacyContent && mayOfferImport && !window.localStorage.getItem(dismissedKey)) {
+        if (!localOwner) window.localStorage.setItem(ownerKey, session.user.id);
         setLegacyImport(legacy);
       } else {
         setLegacyImport(null);
@@ -534,6 +540,13 @@ function Index() {
       setClients((current) => [...imported, ...current]);
       setPanels((current) => normalizePanelNames([...current, ...legacyImport.panels]));
       window.localStorage.setItem("iptv-client-manager.import-dismissed." + session.user.id, "true");
+      try {
+        window.localStorage.removeItem(CLIENTS_STORAGE_KEY);
+        window.localStorage.removeItem(PANELS_STORAGE_KEY);
+        window.localStorage.removeItem("iptv-client-manager.legacy-data-owner.v1");
+      } catch {
+        // The cloud copy is complete; clearing the old browser copy is best effort.
+      }
       setLegacyImport(null);
       setToast(imported.length + (imported.length === 1 ? " cliente importado." : " clientes importados."));
     } catch (error) {
