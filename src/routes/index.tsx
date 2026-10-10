@@ -210,7 +210,6 @@ function ClientFormModal({ client, panels, onClose, onSave }: ClientFormModalPro
             <div className="form-grid">
               <label className="field field-span-2"><span>Nome do cliente <b>*</b></span><input autoFocus required maxLength={90} value={form.name} onChange={(event) => update("name", event.target.value)} placeholder="Ex.: Ana Souza" /></label>
               <label className="field"><span>WhatsApp / telefone</span><input type="tel" maxLength={30} value={form.phone} onChange={(event) => update("phone", event.target.value)} placeholder="(11) 99999-9999" /></label>
-              <label className="field"><span>Plano comprado <b>*</b></span><input required maxLength={60} value={form.plan} onChange={(event) => update("plan", event.target.value)} placeholder="Ex.: Mensal, trimestral" /></label>
             </div>
           </div>
           <div className="form-section">
@@ -223,8 +222,9 @@ function ClientFormModal({ client, panels, onClose, onSave }: ClientFormModalPro
             </div>
           </div>
           <div className="form-section">
-            <div className="form-section-title"><span className="form-step">03</span><div><strong>Período do plano</strong><small>Acompanhe a compra e o próximo vencimento.</small></div></div>
+            <div className="form-section-title"><span className="form-step">03</span><div><strong>Plano e período</strong><small>Informe o plano contratado, a compra e o próximo vencimento.</small></div></div>
             <div className="form-grid">
+              <label className="field"><span>Plano comprado <b>*</b></span><input required maxLength={60} value={form.plan} onChange={(event) => update("plan", event.target.value)} placeholder="Ex.: 30 dias, 3 meses, anual" /></label>
               <label className="field"><span>Data da compra <b>*</b></span><input required type="date" value={form.purchaseDate} onChange={(event) => update("purchaseDate", event.target.value)} /></label>
               <label className="field"><span>Data de expiração <b>*</b></span><input required type="date" min={form.purchaseDate} value={form.expirationDate} onChange={(event) => update("expirationDate", event.target.value)} /></label>
               <label className="field field-span-2"><span>Observações</span><textarea rows={2} maxLength={300} value={form.notes} onChange={(event) => update("notes", event.target.value)} placeholder="Anotações internas sobre este cliente (opcional)" /></label>
